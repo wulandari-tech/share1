@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const Code = require('../models/code');
-const Comment = require('../models/comment'); // <-- BARU
+const Comment = require('../models/comment');
 const { cloudinary, upload } = require('../config/cloudinary');
 const { isLoggedIn, isAuthor } = require('../middleware');
 const tmp = require('tmp');
 const fs = require('fs-extra');
 const path = require('path');
 const axios = require('axios');
+
 function getFileExtensionForSnippet(language) {
   const langMap = {
     'javascript': '.js', 'python': '.py', 'htmlmixed': '.html', 'html': '.html',
@@ -24,7 +25,7 @@ async function deleteFromCloudinary(publicId, resourceType = "auto") {
     try {
         await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
     } catch (error) {
-        console.error(`Failed to delete ${publicId} from Cloudinary:`, error);
+        console.error(`Cloudinary Deletion Error for ${publicId}:`, error.message);
     }
 }
 
@@ -59,20 +60,21 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
     } else if (snippetContentFromForm) {
       newCodeData.isSnippetTextFile = true;
       const sanitizedTitle = title.replace(/[^a-z0-9_.-]/gi, '_') || 'snippet';
-      const snippetFileName = `${sanitizedTitle}${getFileExtensionForSnippet(snippetLanguage)}`;
+      const snippetFileExtension = getFileExtensionForSnippet(snippetLanguage);
+      const snippetFileName = `${sanitizedTitle}${snippetFileExtension}`;
       
-      tempFileObject = tmp.fileSync({ postfix: getFileExtensionForSnippet(snippetLanguage) });
+      tempFileObject = tmp.fileSync({ postfix: snippetFileExtension });
       await fs.writeFile(tempFileObject.name, snippetContentFromForm);
 
       const result = await cloudinary.uploader.upload(tempFileObject.name, {
-        folder: process.env.CLOUDINARY_UPLOAD_FOLDER || 'code_share_uploads',
+        folder: (process.env.CLOUDINARY_UPLOAD_FOLDER || 'code_share_uploads') + '/snippets',
         resource_type: "raw",
         public_id: `${sanitizedTitle}_${Date.now()}`
       });
       
       newCodeData.fileUrl = result.secure_url;
       newCodeData.fileName = snippetFileName;
-      newCodeData.fileType = 'text/plain';
+      newCodeData.fileType = `text/${snippetLanguage === 'plaintext' ? 'plain' : snippetLanguage}`;
       newCodeData.cloudinaryPublicId = result.public_id;
     }
 
@@ -87,8 +89,11 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
         req.flash('error', errors.join(', '));
         return res.redirect('/codes/upload');
     }
-    console.error("Upload error:", err);
-    req.flash('error', `Upload failed: ${err.message || 'Unknown error'}`);
+    if (err.http_code && err.message) {
+        req.flash('error', `Cloudinary error: ${err.message}`);
+    } else {
+        req.flash('error', `Upload failed: ${err.message || 'Unknown error'}`);
+    }
     const backURLReferer = req.header('Referer') || '/codes/upload';
     res.redirect(backURLReferer);
   } finally {
@@ -100,11 +105,12 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
 
 router.get('/view/:id', async (req, res, next) => {
   try {
-    const code = await Code.findById(req.params.id).populate('uploader', 'username').lean();
-    if (!code) {
+    const codeDocument = await Code.findById(req.params.id).populate('uploader', 'username');
+    if (!codeDocument) {
       req.flash('error', 'Code not found.');
       return res.redirect('/');
     }
+    const code = codeDocument.toObject();
 
     if (!code.isPublic && (!req.session.user || !code.uploader._id.toString() === (req.session.user._id).toString() )) {
       req.flash('error', 'This code is private.');
@@ -114,19 +120,20 @@ router.get('/view/:id', async (req, res, next) => {
     let fetchedSnippetContent = null;
     if (code.fileUrl && code.isSnippetTextFile) {
       try {
-        const response = await axios.get(code.fileUrl, { timeout: 5000 });
+        const response = await axios.get(code.fileUrl, { timeout: 7000 }); // Increased timeout
         fetchedSnippetContent = response.data;
       } catch (fetchErr) {
-        console.error(`Failed to fetch snippet content from ${code.fileUrl}:`, fetchErr.message);
+        console.error(`Fetch snippet content error from ${code.fileUrl}:`, fetchErr.message);
+        req.flash('error', 'Could not load snippet content. It might be unavailable or too large.');
       }
     }
     
-    const comments = await Comment.find({ codePost: code._id }).populate('author.id', 'username').sort({ createdAt: -1 }).lean(); // <-- BARU
+    const comments = await Comment.find({ codePost: code._id }).populate('author.id', 'username').sort({ createdAt: -1 }).lean();
     await Code.updateOne({ _id: req.params.id }, { $inc: { views: 1 } });
 
     res.render('view', {
       code: { ...code, fetchedSnippetContent },
-      comments, // <-- BARU
+      comments,
       pageTitle: `${code.title} - SHARE SOURCE CODE`
     });
   } catch (err) {
@@ -135,21 +142,26 @@ router.get('/view/:id', async (req, res, next) => {
 });
 
 router.get('/:id/edit', isLoggedIn, isAuthor, async (req, res, next) => {
-    let codeToEdit = res.locals.code.toObject();
-    let fetchedSnippetContentForEdit = null;
+    try {
+        let codeToEdit = res.locals.code.toObject();
+        let fetchedSnippetContentForEdit = null;
 
-    if (codeToEdit.fileUrl && codeToEdit.isSnippetTextFile) {
-        try {
-            const response = await axios.get(codeToEdit.fileUrl, { timeout: 5000 });
-            fetchedSnippetContentForEdit = response.data;
-        } catch (fetchErr) {
-            console.error(`Failed to fetch snippet for edit from ${codeToEdit.fileUrl}:`, fetchErr.message);
+        if (codeToEdit.fileUrl && codeToEdit.isSnippetTextFile) {
+            try {
+                const response = await axios.get(codeToEdit.fileUrl, { timeout: 7000 });
+                fetchedSnippetContentForEdit = response.data;
+            } catch (fetchErr) {
+                console.error(`Fetch snippet for edit error from ${codeToEdit.fileUrl}:`, fetchErr.message);
+                req.flash('error', 'Could not load current snippet content for editing.');
+            }
         }
+        res.render('edit', {
+            code: { ...codeToEdit, fetchedSnippetContentForEdit },
+            pageTitle: `Edit ${codeToEdit.title} - SHARE SOURCE CODE`
+        });
+    } catch (err) {
+        next(err);
     }
-    res.render('edit', {
-        code: { ...codeToEdit, fetchedSnippetContentForEdit },
-        pageTitle: `Edit ${codeToEdit.title} - SHARE SOURCE CODE`
-    });
 });
 
 router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res, next) => {
@@ -190,22 +202,27 @@ router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res,
         codeToUpdate.cloudinaryPublicId = null;
         codeToUpdate.isSnippetTextFile = false;
     } else if (snippetContentFromForm) {
+        // Only delete old if it's being replaced by a new snippet or if it wasn't a snippet text file before
         if (oldCloudinaryPublicId && (oldCloudinaryPublicId !== codeToUpdate.cloudinaryPublicId || !codeToUpdate.isSnippetTextFile)) {
             await deleteFromCloudinary(oldCloudinaryPublicId, oldIsSnippetTextFile ? "raw" : "auto");
         }
+        
         const sanitizedTitle = title.replace(/[^a-z0-9_.-]/gi, '_') || 'snippet';
-        const snippetFileName = `${sanitizedTitle}${getFileExtensionForSnippet(snippetLanguage)}`;
+        const snippetFileExtension = getFileExtensionForSnippet(snippetLanguage);
+        const snippetFileName = `${sanitizedTitle}${snippetFileExtension}`;
 
-        tempFileObject = tmp.fileSync({ postfix: getFileExtensionForSnippet(snippetLanguage) });
+        tempFileObject = tmp.fileSync({ postfix: snippetFileExtension });
         await fs.writeFile(tempFileObject.name, snippetContentFromForm);
+        
         const result = await cloudinary.uploader.upload(tempFileObject.name, {
-            folder: process.env.CLOUDINARY_UPLOAD_FOLDER || 'code_share_uploads',
+            folder: (process.env.CLOUDINARY_UPLOAD_FOLDER || 'code_share_uploads') + '/snippets',
             resource_type: "raw",
             public_id: `${sanitizedTitle}_${Date.now()}`
         });
+
         codeToUpdate.fileUrl = result.secure_url;
         codeToUpdate.fileName = snippetFileName;
-        codeToUpdate.fileType = 'text/plain';
+        codeToUpdate.fileType = `text/${snippetLanguage === 'plaintext' ? 'plain' : snippetLanguage}`;
         codeToUpdate.cloudinaryPublicId = result.public_id;
         codeToUpdate.isSnippetTextFile = true;
     }
@@ -219,8 +236,11 @@ router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res,
         req.flash('error', errors.join(', '));
         return res.redirect(`/codes/${req.params.id}/edit`);
     }
-    console.error("Update error:", err);
-    req.flash('error', `Update failed: ${err.message || 'Unknown error'}`);
+    if (err.http_code && err.message) {
+        req.flash('error', `Cloudinary error: ${err.message}`);
+    } else {
+        req.flash('error', `Update failed: ${err.message || 'Unknown error'}`);
+    }
     const backURLReferer = req.header('Referer') || `/codes/${req.params.id}/edit`;
     res.redirect(backURLReferer);
   } finally {
@@ -236,11 +256,8 @@ router.delete('/:id', isLoggedIn, isAuthor, async (req, res, next) => {
     if (codeToDelete.cloudinaryPublicId) {
         await deleteFromCloudinary(codeToDelete.cloudinaryPublicId, codeToDelete.isSnippetTextFile ? "raw" : "auto");
     }
-    // Hapus komentar terkait sebelum menghapus postingan kode
     await Comment.deleteMany({ codePost: codeToDelete._id });
-    
-    await Code.findByIdAndRemove(req.params.id); // findByIdAndRemove is okay here
-
+    await Code.findByIdAndRemove(req.params.id);
     req.flash('success', 'Code/File and associated comments deleted successfully!');
     res.redirect('/');
   } catch (err) {
@@ -273,7 +290,6 @@ router.get('/:id/download-snippet', async (req, res, next) => {
   }
 });
 
-// Like/Unlike Route
 router.post('/:id/like', isLoggedIn, async (req, res, next) => {
     const backURL = req.header('Referer') || `/codes/view/${req.params.id}`;
     try {
@@ -287,22 +303,20 @@ router.post('/:id/like', isLoggedIn, async (req, res, next) => {
         const userIndexInLikes = code.likes.findIndex(id => id.equals(userId));
 
         if (userIndexInLikes > -1) {
-            code.likes.splice(userIndexInLikes, 1); // Unlike
+            code.likes.splice(userIndexInLikes, 1);
             req.flash('success', 'Post unliked!');
         } else {
-            code.likes.push(userId); // Like
+            code.likes.push(userId);
             req.flash('success', 'Post liked!');
         }
         await code.save();
         res.redirect(backURL);
     } catch (err) {
-        console.error("Like/Unlike error:", err);
         req.flash('error', 'Could not update like status.');
         res.redirect(backURL);
     }
 });
 
-// Add Comment Route
 router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
     const backURL = req.header('Referer') || `/codes/view/${req.params.id}`;
     try {
@@ -326,20 +340,18 @@ router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
         });
         await newComment.save();
         req.flash('success', 'Comment added successfully!');
-        res.redirect(backURL + '#comments-section'); // Redirect to comments section
+        res.redirect(backURL + '#comments-section');
     } catch (err) {
         if (err.name === 'ValidationError') {
             let errors = Object.values(err.errors).map(val => val.message);
             req.flash('error', errors.join(', '));
         } else {
-            console.error("Add comment error:", err);
             req.flash('error', 'Could not add comment.');
         }
         res.redirect(backURL);
     }
 });
 
-// Delete Comment Route (Optional - requires isCommentAuthor middleware if implemented fully)
 router.delete('/:id/comments/:comment_id', isLoggedIn, async (req, res, next) => {
     const backURL = req.header('Referer') || `/codes/view/${req.params.id}`;
     try {
@@ -348,7 +360,6 @@ router.delete('/:id/comments/:comment_id', isLoggedIn, async (req, res, next) =>
             req.flash('error', 'Comment not found.');
             return res.redirect(backURL);
         }
-        // Basic author check (can be expanded into a middleware)
         if (!comment.author.id.equals(req.session.user._id)) {
             req.flash('error', 'You are not authorized to delete this comment.');
             return res.redirect(backURL);
@@ -357,11 +368,9 @@ router.delete('/:id/comments/:comment_id', isLoggedIn, async (req, res, next) =>
         req.flash('success', 'Comment deleted successfully!');
         res.redirect(backURL + '#comments-section');
     } catch (err) {
-        console.error("Delete comment error:", err);
         req.flash('error', 'Could not delete comment.');
         res.redirect(backURL);
     }
 });
-
 
 module.exports = router;
