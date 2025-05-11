@@ -33,6 +33,11 @@ const UserSchema = new mongoose.Schema({
     url: { type: String, default: '/images/default-avatar.png' },
     public_id: String
   },
+  country: {
+    type: String,
+    trim: true,
+    maxlength: 100
+  },
   followers: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -41,11 +46,9 @@ const UserSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
-  role: {
-    type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
-  }
+  githubId: { type: String, unique: true, sparse: true },
+  githubAccessToken: { type: String },
+  githubRefreshToken: { type: String }
 }, { timestamps: true });
 
 UserSchema.pre('save', async function(next) {

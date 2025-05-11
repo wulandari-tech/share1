@@ -1,0 +1,32 @@
+<%- include('./partials/header') %>
+
+<div class="max-w-3xl mx-auto text-center py-12 px-4">
+    <div class="bg-gray-800 p-8 rounded-xl shadow-2xl">
+        <% if (typeof errorCode !== 'undefined' && errorCode === 404) { %>
+            <i class="fas fa-compass-slash fa-5x text-red-500 mb-6"></i>
+            <h1 class="text-6xl font-extrabold text-red-400 mb-4">404</h1>
+            <h2 class="text-3xl font-semibold text-gray-100 mb-3">Page Not Found</h2>
+            <p class="text-gray-400 mb-8">
+                Oops! The page you are looking for does not exist. It might have been moved or deleted.
+            </p>
+        <% } else { %>
+            <i class="fas fa-bomb fa-5x text-red-500 mb-6"></i>
+            <h1 class="text-6xl font-extrabold text-red-400 mb-4"><%= typeof errorCode !== 'undefined' ? errorCode : 'Error' %></h1>
+            <h2 class="text-3xl font-semibold text-gray-100 mb-3"><%= typeof pageErrorTitle !== 'undefined' ? pageErrorTitle : "Something Went Wrong" %></h2>
+            <p class="text-gray-400 mb-8">
+                <%= typeof errorMessage !== 'undefined' ? errorMessage : "We're sorry, but an unexpected error occurred. Our team has been notified." %>
+            </p>
+            <% if (typeof errorStack !== 'undefined' && errorStack) { %>
+                <div class="mt-6 text-left bg-gray-700 p-4 rounded-md max-h-60 overflow-y-auto">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-2">Error Details (Development Mode):</h3>
+                    <pre class="text-xs text-gray-400 whitespace-pre-wrap"><%= errorStack %></pre>
+                </div>
+            <% } %>
+        <% } %>
+        <a href="/" class="mt-8 inline-block bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-md transition duration-150">
+            <i class="fas fa-home mr-2"></i> Go to Homepage
+        </a>
+    </div>
+</div>
+
+<%- include('./partials/footer') %>

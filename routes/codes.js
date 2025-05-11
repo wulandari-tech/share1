@@ -1,17 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
 const Code = require('../models/code');
+const User = require('../models/user');
 const Comment = require('../models/comment');
 const Notification = require('../models/notification');
-const Report = require('../models/report');
-const User = require('../models/user');
 const { cloudinary, upload } = require('../config/cloudinary');
 const { isLoggedIn, isAuthor } = require('../middleware');
 const tmp = require('tmp');
 const fs = require('fs-extra');
 const path = require('path');
 const axios = require('axios');
+const mongoose = require('mongoose');
 
 function getFileExtensionForSnippet(language) {
   const langMap = {
@@ -33,6 +32,21 @@ async function deleteFromCloudinary(publicId, resourceType = "auto") {
     }
 }
 
+function getJudge0LanguageId(languageName) {
+    const mapping = {
+        'python': 71, 'javascript': 63, 'java': 62, 'c': 50, 'cpp': 54,
+        'csharp': 51, 'php': 68, 'ruby': 72, 'go': 60, 'rust': 73,
+        'swift': 83, 'kotlin': 78, 'sql': 82,
+    };
+    if (!languageName) return null;
+    const normalizedLang = languageName.toLowerCase()
+        .replace('htmlmixed', 'html')
+        .replace('text/x-csrc', 'c')
+        .replace('text/x-c++src', 'cpp')
+        .replace('text/x-java', 'java');
+    return mapping[normalizedLang] || null;
+}
+
 router.get('/upload', isLoggedIn, (req, res) => {
   res.render('upload', { pageTitle: "Upload Code - SHARE SOURCE CODE", code: {} });
 });
@@ -40,7 +54,75 @@ router.get('/upload', isLoggedIn, (req, res) => {
 router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
   let tempFileObject = null;
   try {
-    const { title, description, content: snippetContentFromForm, snippetLanguage, isPublic } = req.body;
+    const { title, description, content: snippetContentFromForm, snippetLanguage, isPublic, importGistUrl, actionType } = req.body;
+
+    if (actionType === 'importGist') {
+        if (!importGistUrl) {
+            req.flash('error', 'GitHub Gist URL is required for import.');
+            return res.redirect('/codes/upload');
+        }
+        const user = await User.findById(req.session.user._id).select('githubAccessToken').lean();
+        if (!user || !user.githubAccessToken) {
+            req.flash('error', 'Please link your GitHub account in profile settings to import Gists.');
+            return res.redirect('/users/profile/edit');
+        }
+        const gistUrlParts = importGistUrl.trim().split('/');
+        const gistId = gistUrlParts[gistUrlParts.length - 1].split('#')[0];
+
+        if (!gistId) {
+            req.flash('error', 'Invalid Gist URL format.');
+            return res.redirect('/codes/upload');
+        }
+        
+        const gistResponse = await axios.get(`https://api.github.com/gists/${gistId}`, {
+            headers: { 'Authorization': `token ${user.githubAccessToken}`, 'Accept': 'application/vnd.github.v3+json' }
+        });
+        const gistData = gistResponse.data;
+        if (!gistData.files || Object.keys(gistData.files).length === 0) {
+            req.flash('error', 'The Gist is empty or files could not be retrieved.');
+            return res.redirect('/codes/upload');
+        }
+        const firstFileName = Object.keys(gistData.files)[0];
+        const gistFile = gistData.files[firstFileName];
+
+        if (!gistFile || typeof gistFile.content === 'undefined') {
+             req.flash('error', 'Could not retrieve content from the Gist file.');
+             return res.redirect('/codes/upload');
+        }
+        
+        const newCodeDataFromGist = {
+            title: gistData.description || firstFileName || `Gist ${gistId}`,
+            description: gistData.description || `Imported from Gist: ${importGistUrl}`,
+            snippetLanguage: gistFile.language ? gistFile.language.toLowerCase() : 'plaintext',
+            isPublic: gistData.public,
+            uploader: req.session.user._id,
+            isSnippetTextFile: true 
+        };
+        
+        const sanitizedTitle = (newCodeDataFromGist.title).replace(/[^a-z0-9_.-]/gi, '_').substring(0, 50) || 'gist_snippet';
+        const snippetFileExtension = getFileExtensionForSnippet(newCodeDataFromGist.snippetLanguage);
+        const snippetFileName = `${sanitizedTitle}${snippetFileExtension}`;
+
+        tempFileObject = tmp.fileSync({ postfix: snippetFileExtension });
+        await fs.writeFile(tempFileObject.name, gistFile.content);
+
+        const result = await cloudinary.uploader.upload(tempFileObject.name, {
+            folder: (process.env.CLOUDINARY_UPLOAD_FOLDER || 'code_share_uploads') + '/snippets',
+            resource_type: "raw",
+            public_id: `${sanitizedTitle}_${Date.now()}`
+        });
+        
+        newCodeDataFromGist.fileUrl = result.secure_url;
+        newCodeDataFromGist.fileName = snippetFileName;
+        newCodeDataFromGist.fileType = `text/${newCodeDataFromGist.snippetLanguage === 'plaintext' ? 'plain' : newCodeDataFromGist.snippetLanguage}`;
+        newCodeDataFromGist.cloudinaryPublicId = result.public_id;
+
+        const newCode = new Code(newCodeDataFromGist);
+        await newCode.save();
+        req.flash('success', `Gist "${newCodeDataFromGist.title}" imported successfully!`);
+        return res.redirect(`/codes/view/${newCode._id}`);
+    }
+
 
     if (!snippetContentFromForm && !req.file) {
       req.flash('error', 'You must provide either code content or upload a file.');
@@ -63,7 +145,7 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
       newCodeData.cloudinaryPublicId = req.file.filename;
     } else if (snippetContentFromForm) {
       newCodeData.isSnippetTextFile = true;
-      const sanitizedTitle = title.replace(/[^a-z0-9_.-]/gi, '_') || 'snippet';
+      const sanitizedTitle = title.replace(/[^a-z0-9_.-]/gi, '_').substring(0,50) || 'snippet';
       const snippetFileExtension = getFileExtensionForSnippet(snippetLanguage);
       const snippetFileName = `${sanitizedTitle}${snippetFileExtension}`;
       
@@ -90,10 +172,16 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
   } catch (err) {
     if (err.name === 'ValidationError') {
         let errors = Object.values(err.errors).map(val => val.message);
-        req.flash('error', errors.join(' '));
+        req.flash('error', errors.join(', '));
         return res.redirect('/codes/upload');
     }
-    if (err.http_code && err.message) {
+    if (err.isAxiosError) {
+        console.error("Axios Error (Gist Import/Other):", err.response ? err.response.data : err.message);
+        let errMsg = 'Failed to process external request.';
+        if (err.response && err.response.status === 404) errMsg = 'External resource not found or access denied.';
+        else if (err.response && err.response.data && err.response.data.message) errMsg = `External API Error: ${err.response.data.message}`;
+        req.flash('error', errMsg);
+    } else if (err.http_code && err.message) {
         req.flash('error', `Cloudinary error: ${err.message}`);
     } else {
         console.error("Upload POST Error:", err);
@@ -114,12 +202,11 @@ router.get('/view/:id', async (req, res, next) => {
         req.flash('error', 'Invalid Post ID.');
         return res.redirect('/');
     }
-    const codeDocument = await Code.findById(req.params.id).populate('uploader', 'username avatar.url _id');
+    const codeDocument = await Code.findById(req.params.id).populate('uploader', 'username avatar.url _id githubId githubAccessToken');
     if (!codeDocument) {
       req.flash('error', 'Code not found.');
       return res.redirect('/');
     }
-    
     const code = codeDocument.toObject();
 
     if (!code.isPublic && (!req.session.user || !code.uploader._id.toString() === (req.session.user._id).toString() )) {
@@ -134,8 +221,6 @@ router.get('/view/:id', async (req, res, next) => {
         fetchedSnippetContent = response.data;
       } catch (fetchErr) {
         console.error(`Fetch snippet content error from ${code.fileUrl}:`, fetchErr.message);
-        fetchedSnippetContent = null; // Set to null on error
-        req.flash('error', 'Could not load snippet content. It might be unavailable or too large.');
       }
     }
     
@@ -144,17 +229,12 @@ router.get('/view/:id', async (req, res, next) => {
         .sort({ createdAt: -1 })
         .lean();
 
-    // Increment views only if not the uploader and logged in
-    if (req.session.user && code.uploader._id.toString() !== req.session.user._id.toString()) {
-        if(typeof codeDocument.views !== 'number') codeDocument.views = 0;
-        codeDocument.views += 1;
-        await codeDocument.save(); // Save the Mongoose document
-        code.views = codeDocument.views; // Update the plain object
-    }
-
+    if(typeof codeDocument.views !== 'number') codeDocument.views = 0;
+    codeDocument.views += 1;
+    await codeDocument.save();
 
     res.render('view', {
-      code: { ...code, fetchedSnippetContent },
+      code: { ...code, views: codeDocument.views, fetchedSnippetContent },
       comments,
       pageTitle: `${code.title} - SHARE SOURCE CODE`
     });
@@ -174,7 +254,6 @@ router.get('/:id/edit', isLoggedIn, isAuthor, async (req, res, next) => {
                 fetchedSnippetContentForEdit = response.data;
             } catch (fetchErr) {
                 console.error(`Fetch snippet for edit error from ${codeToEdit.fileUrl}:`, fetchErr.message);
-                req.flash('error', 'Could not load current snippet content for editing.');
             }
         }
         res.render('edit', {
@@ -228,7 +307,7 @@ router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res,
             await deleteFromCloudinary(oldCloudinaryPublicId, oldIsSnippetTextFile ? "raw" : "auto");
         }
         
-        const sanitizedTitle = title.replace(/[^a-z0-9_.-]/gi, '_') || 'snippet';
+        const sanitizedTitle = title.replace(/[^a-z0-9_.-]/gi, '_').substring(0,50) || 'snippet';
         const snippetFileExtension = getFileExtensionForSnippet(snippetLanguage);
         const snippetFileName = `${sanitizedTitle}${snippetFileExtension}`;
 
@@ -254,7 +333,7 @@ router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res,
   } catch (err) {
      if (err.name === 'ValidationError') {
         let errors = Object.values(err.errors).map(val => val.message);
-        req.flash('error', errors.join(' '));
+        req.flash('error', errors.join(', '));
         return res.redirect(`/codes/${req.params.id}/edit`);
     }
     if (err.http_code && err.message) {
@@ -279,9 +358,8 @@ router.delete('/:id', isLoggedIn, isAuthor, async (req, res, next) => {
         await deleteFromCloudinary(codeToDelete.cloudinaryPublicId, codeToDelete.isSnippetTextFile ? "raw" : "auto");
     }
     await Comment.deleteMany({ codePost: codeToDelete._id });
-    await Notification.deleteMany({ targetPost: codeToDelete._id });
     await Code.findByIdAndRemove(req.params.id);
-    req.flash('success', 'Code/File and associated data deleted successfully!');
+    req.flash('success', 'Code/File and associated comments deleted successfully!');
     res.redirect('/');
   } catch (err) {
     next(err);
@@ -301,10 +379,7 @@ router.get('/:id/download-snippet', async (req, res, next) => {
       req.flash('error', 'Code not found.');
       return res.redirect(backURL);
     }
-    const uploaderIdString = code.uploader ? code.uploader.toString() : null;
-    const currentUserIdString = req.session.user ? req.session.user._id.toString() : null;
-
-    if (!code.isPublic && (!req.session.user || uploaderIdString !== currentUserIdString )) {
+    if (!code.isPublic && (!req.session.user || !code.uploader.toString() === (req.session.user._id).toString())) {
       req.flash('error', 'This code is private.');
       return res.redirect('/');
     }
@@ -381,7 +456,7 @@ router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
         }
 
         const newComment = new Comment({
-            text: req.body.comment.text.trim(),
+            text: req.body.comment.text,
             author: {
                 id: req.session.user._id,
                 username: req.session.user.username
@@ -405,7 +480,7 @@ router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
     } catch (err) {
         if (err.name === 'ValidationError') {
             let errors = Object.values(err.errors).map(val => val.message);
-            req.flash('error', errors.join(' '));
+            req.flash('error', errors.join(', '));
         } else {
             console.error("Comment POST Error:", err);
             req.flash('error', 'Could not add comment.');
@@ -426,17 +501,10 @@ router.delete('/:id/comments/:comment_id', isLoggedIn, async (req, res, next) =>
             req.flash('error', 'Comment not found.');
             return res.redirect(backURL);
         }
-        
-        const codePost = await Code.findById(req.params.id); // Ambil post untuk cek uploader
-        const isCommentAuthor = comment.author.id.equals(req.session.user._id);
-        const isPostUploader = codePost && codePost.uploader.equals(req.session.user._id);
-        const isAdmin = req.session.user && req.session.user.role === 'admin'; // Perlu info role di session
-
-        if (!isCommentAuthor && !isPostUploader && !isAdmin) {
-             req.flash('error', 'You are not authorized to delete this comment.');
-             return res.redirect(backURL);
+        if (!comment.author.id.equals(req.session.user._id)) {
+            req.flash('error', 'You are not authorized to delete this comment.');
+            return res.redirect(backURL);
         }
-
         await Comment.findByIdAndRemove(req.params.comment_id);
         req.flash('success', 'Comment deleted successfully!');
         res.redirect(backURL + '#comments-section');
@@ -447,59 +515,150 @@ router.delete('/:id/comments/:comment_id', isLoggedIn, async (req, res, next) =>
     }
 });
 
-router.post('/:id/report', isLoggedIn, async (req, res, next) => {
+router.post('/:id/export-gist', isLoggedIn, async (req, res, next) => {
     const backURL = req.header('Referer') || `/codes/view/${req.params.id}`;
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             req.flash('error', 'Invalid Post ID.');
             return res.redirect(backURL);
         }
-        const codeToReport = await Code.findById(req.params.id);
-        if (!codeToReport) {
-            req.flash('error', 'Post not found.');
+        const code = await Code.findById(req.params.id).lean();
+        const user = await User.findById(req.session.user._id).select('githubAccessToken').lean();
+
+        if (!code) {
+            req.flash('error', 'Code not found.');
             return res.redirect(backURL);
         }
-
-        const { reason } = req.body;
-        if (!reason || reason.trim().length < 10) {
-            req.flash('error', 'Please provide a reason for reporting (at least 10 characters).');
-            return res.redirect(backURL);
+        if (!user || !user.githubAccessToken) {
+            req.flash('error', 'GitHub not linked or access token missing. Please link your GitHub account in your profile settings.');
+            return res.redirect(`/${req.session.user.username.toLowerCase()}`);
         }
 
-        const existingReport = await Report.findOne({
-            reportedItemId: codeToReport._id,
-            reporter: req.session.user._id,
-            reportedItemType: 'Code'
+        let contentToExport = '';
+        let fileNameForGist = `${code.title.replace(/[^a-zA-Z0-9_.-]/g, '_').substring(0,50) || 'snippet'}${getFileExtensionForSnippet(code.snippetLanguage)}`;
+
+        if (code.isSnippetTextFile && code.fileUrl) {
+            const response = await axios.get(code.fileUrl, { timeout: 7000 });
+            contentToExport = response.data;
+        } else if (!code.isSnippetTextFile && code.fileName) {
+            contentToExport = `File: ${code.fileName}\nDescription: ${code.description}\n\nView original on SHARE SOURCE CODE: ${req.protocol}://${req.get('host')}/codes/view/${code._id}`;
+            fileNameForGist = `${code.fileName}.md`;
+        } else {
+             req.flash('error', 'No content available to export to Gist.');
+             return res.redirect(backURL);
+        }
+
+        const gistPayload = {
+            description: code.title,
+            public: code.isPublic,
+            files: {
+                [fileNameForGist]: {
+                    content: contentToExport
+                }
+            }
+        };
+        
+        const gistResponse = await axios.post('https://api.github.com/gists', gistPayload, {
+            headers: { 'Authorization': `token ${user.githubAccessToken}`, 'Accept': 'application/vnd.github.v3+json' }
         });
+        
+        const gistUrl = gistResponse.data.html_url;
 
-        if (existingReport) {
-            req.flash('error', 'You have already reported this post.');
-            return res.redirect(backURL);
-        }
-
-        const newReport = new Report({
-            reportedItemType: 'Code',
-            reportedItemId: codeToReport._id,
-            reporter: req.session.user._id,
-            reason: reason.trim()
-        });
-        await newReport.save();
-
-        req.flash('success', 'Post reported successfully. Our team will review it.');
+        req.flash('success', `Successfully exported to GitHub Gist! View it here: <a href="${gistUrl}" target="_blank" class="font-bold hover:underline">${gistUrl}</a>`);
         res.redirect(backURL);
 
     } catch (err) {
-        if (err.name === 'ValidationError') {
-            let errorMessages = [];
-            for (let field in err.errors) {
-                errorMessages.push(err.errors[field].message);
-            }
-            req.flash('error', errorMessages.join(' '));
-        } else {
-            console.error("Report Post Error:", err);
-            req.flash('error', 'Could not submit report. Please try again.');
+        console.error("Gist Export Error:", err.response ? err.response.data : err.message);
+        let errMsg = `Failed to export to Gist.`;
+        if (err.isAxiosError && err.response && err.response.data && err.response.data.message) {
+            errMsg = `GitHub API Error: ${err.response.data.message}`;
+        } else if (err.isAxiosError) {
+            errMsg = `Network error during Gist export: ${err.message}`;
         }
+        req.flash('error', errMsg);
         res.redirect(backURL);
+    }
+});
+
+router.post('/:id/execute-judge0', isLoggedIn, async (req, res, next) => {
+    const { codeContent, language, stdin } = req.body;
+
+    if (!codeContent || !language) {
+        return res.status(400).json({ success: false, error: 'Code content and language are required.' });
+    }
+
+    const languageId = getJudge0LanguageId(language);
+    if (!languageId) {
+        return res.status(400).json({ success: false, error: `Language "${language}" is not supported for server-side execution via Judge0.` });
+    }
+
+    if (!process.env.JUDGE0_RAPIDAPI_KEY || !process.env.JUDGE0_RAPIDAPI_HOST) {
+        console.error("Server Config Error: Judge0 API Key or Host not configured in .env");
+        return res.status(500).json({ success: false, error: 'Server-side execution service is not configured by the administrator.' });
+    }
+
+    try {
+        const options = {
+            method: 'POST',
+            url: `https://${process.env.JUDGE0_RAPIDAPI_HOST}/submissions`,
+            params: {
+                base64_encoded: 'false',
+                wait: 'true'
+            },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-RapidAPI-Key': process.env.JUDGE0_RAPIDAPI_KEY,
+                'X-RapidAPI-Host': process.env.JUDGE0_RAPIDAPI_HOST
+            },
+            data: {
+                language_id: languageId,
+                source_code: codeContent,
+                stdin: stdin || ''
+            }
+        };
+
+        const judgeResponse = await axios.request(options);
+        
+        if (judgeResponse && judgeResponse.data) {
+            return res.json({
+                success: true,
+                output: judgeResponse.data.stdout,
+                stderr: judgeResponse.data.stderr,
+                status: judgeResponse.data.status ? judgeResponse.data.status.description : 'Unknown Status',
+                time: judgeResponse.data.time,
+                memory: judgeResponse.data.memory,
+                compile_output: judgeResponse.data.compile_output,
+                message: judgeResponse.data.message
+            });
+        } else {
+            console.error('Judge0 API Error: Invalid response structure from Judge0', judgeResponse);
+            return res.status(500).json({ success: false, error: 'Received an invalid response from the execution service.' });
+        }
+
+    } catch (error) {
+        console.error('Judge0 API Execution Error on Server:', error.message);
+        let statusCode = 500;
+        let responseData = { success: false, error: 'Failed to execute code via Judge0 API.' };
+
+        if (error.isAxiosError && error.response) {
+            console.error('Judge0 API Response Error Data:', JSON.stringify(error.response.data, null, 2));
+            statusCode = error.response.status || 500;
+            responseData.details = error.response.data;
+            if (error.response.data && error.response.data.error) {
+                responseData.error = `Judge0 Error: ${error.response.data.error}`;
+            } else if (error.response.data && error.response.data.message) {
+                responseData.error = `Judge0 Error: ${error.response.data.message}`;
+            } else if (typeof error.response.data === 'string' && error.response.data.startsWith('<!DOCTYPE')) {
+                responseData.error = 'Execution service returned an HTML error page instead of JSON. Check API Key or service status.';
+                 console.error('Judge0 returned HTML, possibly an auth error or service issue.');
+            }
+        } else if (error.isAxiosError) {
+            console.error('Axios Request Error (no response):', error.message);
+            responseData.error = `Network error or Judge0 API unreachable: ${error.message}`;
+        } else {
+            responseData.error = `Internal server error during execution: ${error.message}`;
+        }
+        return res.status(statusCode).json(responseData);
     }
 });
 

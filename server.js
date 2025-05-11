@@ -9,15 +9,16 @@ const User = require('./models/user');
 const Code = require('./models/code');
 const Notification = require('./models/notification');
 const connectDB = require('./config/database');
+
 const indexRoutes = require('./routes/index');
 const authRoutes = require('./routes/auth');
 const codeRoutes = require('./routes/codes');
 const userRoutes = require('./routes/users');
-const adminRoutes = require('./routes/admin');
 const app = express();
 connectDB();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+app.locals.moment = require('moment'); // Jika Anda ingin menggunakan moment.js di EJS
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -30,7 +31,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    maxAge: 1000 * 60 * 60 * 24 * 7
+    maxAge: 1000 * 60 * 60 * 24 * 7 // 1 minggu
   }
 }));
 
@@ -38,7 +39,7 @@ app.use(flash());
 
 app.use(async (req, res, next) => {
   res.locals.currentUser = req.session.user;
-  if (req.session.user) {
+  if (req.session.user && req.session.user._id) { // Pastikan _id ada
     try {
         res.locals.unreadNotificationsCount = await Notification.countDocuments({
             recipient: req.session.user._id,
@@ -53,14 +54,16 @@ app.use(async (req, res, next) => {
   }
   res.locals.success = req.flash('success');
   res.locals.error = req.flash('error');
+  res.locals.SITE_NAME = "SHARE SOURCE CODE"; // Contoh variabel global untuk EJS
+  res.locals.currentPath = req.path; // Untuk active link di navigasi jika perlu
   next();
 });
 
 app.use('/', indexRoutes);
 app.use('/', authRoutes);
-app.use('/admin', adminRoutes);
 app.use('/codes', codeRoutes);
 app.use('/users', userRoutes);
+
 
 const ITEMS_PER_PAGE_PROFILE_SERVER = 8;
 
@@ -75,8 +78,8 @@ async function populateProfileDataForServer(identifier) {
     }
 
     const user = await User.findOne(query)
-        .populate('followers', 'username avatar.url _id')
-        .populate('following', 'username avatar.url _id')
+        .populate('followers', 'username avatar.url _id country')
+        .populate('following', 'username avatar.url _id country')
         .lean();
 
     if (!user) return null;
@@ -90,26 +93,20 @@ async function populateProfileDataForServer(identifier) {
     return user;
 }
 
+
 app.get('/:username', async (req, res, next) => {
     try {
         const requestedUsername = req.params.username.toLowerCase();
-        const commonRoutesAndPrefixes = ['login', 'register', 'logout', 'search', 'public', 'uploads', 'images', 'js', 'css', 'favicon.ico', 'users', 'codes', 'notifications', 'assets', 'fonts'];
-        
-        if (commonRoutesAndPrefixes.some(routeOrPrefix => requestedUsername.startsWith(routeOrPrefix))) {
-            if (commonRoutesAndPrefixes.includes(requestedUsername) || 
-                (requestedUsername.includes('/') && commonRoutesAndPrefixes.some(prefix => requestedUsername.startsWith(prefix + '/'))) ) {
-                return next(); 
-            }
-        }
-        // Khusus untuk rute yang mungkin konflik dengan file statis
-        if (/\.[a-zA-Z0-9]+$/.test(requestedUsername)) { // Ada ekstensi file
-            return next();
+        const commonRoutesAndPrefixes = ['login', 'register', 'logout', 'search', 'public', 'uploads', 'images', 'js', 'css', 'favicon.ico', 'users', 'codes', 'notifications', 'assets', 'api', 'admin'];
+        if (commonRoutesAndPrefixes.some(prefix => requestedUsername.startsWith(prefix))) {
+            return next(); 
         }
         
         const profileUserData = await populateProfileDataForServer(requestedUsername);
 
         if (!profileUserData) {
-            return next(); // Biarkan 404 handler di bawah menangani jika tidak ditemukan
+            req.flash('error', `User profile for "${req.params.username}" not found.`);
+            return res.redirect('/');
         }
         
         const isOwnProfile = req.session.user && req.session.user._id.toString() === profileUserData._id.toString();
@@ -179,20 +176,28 @@ app.get('/:username', async (req, res, next) => {
 });
 
 app.use((req, res, next) => {
-    const error = new Error(`Not Found - ${req.originalUrl}`);
-    error.status = 404;
-    next(error);
+    const err = new Error('Page Not Found');
+    err.status = 404;
+    next(err);
 });
 
 app.use((err, req, res, next) => {
-  console.error("Global error handler:", err.name, err.message, err.status);
-  const backURL = req.header('Referer') || '/';
+  console.error("Global error handler:", err);
+  const statusCode = err.status || 500;
+  const message = statusCode === 500 ? 'Oh no, something went wrong on our end!' : err.message;
+  
   if (!res.headersSent) {
-    if (err.status === 404) {
-        res.status(404).render('404', { pageTitle: "Page Not Found - SHARE SOURCE CODE" });
+    if (req.accepts('html')) {
+        res.status(statusCode).render('error', { // Asumsi ada error.ejs
+            pageTitle: `${statusCode} Error - ${message}`,
+            errorCode: statusCode,
+            errorMessage: message,
+            errorStack: process.env.NODE_ENV === 'development' ? err.stack : null
+        });
+    } else if (req.accepts('json')) {
+        res.status(statusCode).json({ error: message, code: statusCode });
     } else {
-        req.flash('error', err.message || 'Something went terribly wrong!');
-        res.status(err.status || 500).redirect(backURL);
+        res.status(statusCode).send(message);
     }
   } else {
     next(err);

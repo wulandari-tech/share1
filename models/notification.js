@@ -36,11 +36,13 @@ NotificationSchema.methods.generateMessage = async function() {
         this.message = "System notification.";
         return;
     }
+
     const senderUser = await mongoose.model('User').findById(this.sender).select('username').lean();
     if (!senderUser) {
         this.message = "An action occurred from an unknown user.";
         return;
     }
+
     let postTitle = 'a post';
     if (this.targetPost) {
         const targetPostObj = await mongoose.model('Code').findById(this.targetPost).select('title').lean();
@@ -48,6 +50,7 @@ NotificationSchema.methods.generateMessage = async function() {
             postTitle = `"${targetPostObj.title}"`;
         }
     }
+
     switch (this.type) {
         case 'like':
             this.message = `${senderUser.username} liked your post: ${postTitle}.`;

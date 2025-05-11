@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'SHARE SOURCE CODE' %></title>
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : SITE_NAME %></title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/style.css">
-    <% if ( (typeof code !== 'undefined' && code) || (typeof codes !== 'undefined' && codes && codes.length > 0 && ( (typeof code !== 'undefined' && pageTitle.includes(code.title)) || pageTitle.includes("SHARE SOURCE CODE") || (typeof profileData !== 'undefined' && profileData) )) ) { %>
+    <% if ( (typeof code !== 'undefined' && code) || (typeof codes !== 'undefined' && codes && codes.length > 0 && ( (typeof code !== 'undefined' && pageTitle.includes(code.title)) || pageTitle.includes(SITE_NAME) || (typeof profileData !== 'undefined' && profileData) )) ) { %>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
         <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
@@ -70,14 +70,14 @@
       <div class="flex items-center justify-between h-16">
         <div class="flex items-center">
           <a href="/" class="flex-shrink-0 text-2xl font-extrabold hover:opacity-80 transition-opacity animated-gradient-text">
-            <i class="fas fa-code mr-2 opacity-70"></i>SHARE SOURCE CODE
+            <i class="fas fa-code mr-2 opacity-70"></i><%= SITE_NAME %>
           </a>
         </div>
         
         <div class="flex-1 max-w-md mx-4 hidden md:block">
             <form action="/users/search" method="GET" class="relative">
                 <input type="hidden" name="type" value="users">
-                <input type="search" name="q" id="desktop-search-q" placeholder="Search users..."
+                <input type="search" name="q" value="<%= typeof query !== 'undefined' && searchType === 'users' ? query : '' %>" placeholder="Search users..."
                        class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 border border-gray-600 rounded-md py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <i class="fas fa-search text-gray-400"></i>
@@ -87,22 +87,22 @@
 
         <div class="hidden md:block">
           <div class="ml-4 flex items-center md:ml-6 space-x-4">
-            <a href="/" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Home</a>
+            <a href="/" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium <%= currentPath === '/' ? 'bg-gray-900 text-white' : '' %>">Home</a>
             <% if (currentUser) { %>
-              <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Upload</a>
-              <a href="/users/notifications" class="relative text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+              <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium <%= currentPath === '/codes/upload' ? 'bg-gray-900 text-white' : '' %>">Upload</a>
+              <a href="/users/notifications" class="relative text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium <%= currentPath === '/users/notifications' ? 'bg-gray-900 text-white' : '' %>">
                 <i class="fas fa-bell"></i>
-                <% if (locals.unreadNotificationsCount && unreadNotificationsCount > 0) { %>
+                <% if (unreadNotificationsCount && unreadNotificationsCount > 0) { %>
                     <span class="notification-badge"><%= unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount %></span>
                 <% } %>
               </a>
-              <a href="/<%= currentUser.username.toLowerCase() %>" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+              <a href="/<%= currentUser.username.toLowerCase() %>" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium <%= currentPath === ('/' + currentUser.username.toLowerCase()) ? 'bg-gray-900 text-white' : '' %>">
                 My Profile
               </a>
               <a href="/logout" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>
             <% } else { %>
-              <a href="/login" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a>
-              <a href="/register" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Register</a>
+              <a href="/login" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium <%= currentPath === '/login' ? 'bg-gray-900 text-white' : '' %>">Login</a>
+              <a href="/register" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium <%= currentPath === '/register' ? 'bg-gray-900 text-white' : '' %>">Register</a>
             <% } %>
           </div>
         </div>
@@ -119,26 +119,26 @@
       <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
         <form action="/users/search" method="GET" class="relative mb-3">
             <input type="hidden" name="type" value="users">
-            <input type="search" name="q" id="mobile-search-q" placeholder="Search users..."
+            <input type="search" name="q" value="<%= typeof query !== 'undefined' && searchType === 'users' ? query : '' %>" placeholder="Search users..."
                    class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 border border-gray-600 rounded-md py-2 pl-10 pr-4 focus:outline-none focus:ring-primary-500 text-sm">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <i class="fas fa-search text-gray-400"></i>
             </div>
         </form>
-        <a href="/" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Home</a>
+        <a href="/" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium <%= currentPath === '/' ? 'bg-gray-900 text-white' : '' %>">Home</a>
         <% if (currentUser) { %>
-          <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Upload</a>
-          <a href="/users/notifications" class="relative text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">
+          <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium <%= currentPath === '/codes/upload' ? 'bg-gray-900 text-white' : '' %>">Upload</a>
+          <a href="/users/notifications" class="relative text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium <%= currentPath === '/users/notifications' ? 'bg-gray-900 text-white' : '' %>">
             <i class="fas fa-bell"></i> Notifications
-            <% if (locals.unreadNotificationsCount && unreadNotificationsCount > 0) { %>
+            <% if (unreadNotificationsCount && unreadNotificationsCount > 0) { %>
                 <span class="notification-badge" style="top: 2px; right: 2px;"><%= unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount %></span>
             <% } %>
           </a>
-          <a href="/<%= currentUser.username.toLowerCase() %>" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Profile</a>
+          <a href="/<%= currentUser.username.toLowerCase() %>" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium <%= currentPath === ('/' + currentUser.username.toLowerCase()) ? 'bg-gray-900 text-white' : '' %>">My Profile</a>
           <a href="/logout" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Logout</a>
         <% } else { %>
-          <a href="/login" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Login</a>
-          <a href="/register" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Register</a>
+          <a href="/login" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium <%= currentPath === '/login' ? 'bg-gray-900 text-white' : '' %>">Login</a>
+          <a href="/register" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium <%= currentPath === '/register' ? 'bg-gray-900 text-white' : '' %>">Register</a>
         <% } %>
       </div>
     </div>

@@ -38,10 +38,13 @@
                         <img src="<%= person.avatar && person.avatar.url ? person.avatar.url : '/images/default-avatar.png' %>" alt="<%= person.username %>" class="w-16 h-16 rounded-full object-cover mr-4 border-2 border-gray-700">
                         <div>
                             <h3 class="text-xl font-semibold text-primary-300 hover:underline"><%= person.username %></h3>
+                            <% if (person.country) { %>
+                                <p class="text-xs text-gray-500"><i class="fas fa-map-marker-alt text-gray-400 mr-1"></i><%= person.country %></p>
+                            <% } %>
                             <% if (person.bio) { %>
                                 <p class="text-sm text-gray-400 mt-1 truncate"><%= person.bio %></p>
                             <% } %>
-                            <p class="text-xs text-gray-500 mt-1">Joined: <%= new Date(person.createdAt).toLocaleDateString() %></p>
+                            <p class="text-xs text-gray-500 mt-1">Joined: <%= moment(person.createdAt).format('MMMM D, YYYY') %></p>
                         </div>
                     </a>
                 <% }) %>

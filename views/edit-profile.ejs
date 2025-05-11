@@ -7,6 +7,8 @@
     <div>
       <label for="username" class="block text-sm font-medium text-gray-300 mb-1">Username</label>
       <input type="text" name="username" id="username" value="<%= user.username %>" required
+             pattern="^[a-zA-Z0-9_.-]+$" title="Username can only contain letters, numbers, dots, underscores, and hyphens"
+             minlength="3"
              class="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
     </div>
     
@@ -25,21 +27,52 @@
     </div>
 
     <div>
+      <label for="country" class="block text-sm font-medium text-gray-300 mb-1">Country (Optional)</label>
+      <select name="country" id="country"
+              class="w-full p-3 rounded-md bg-gray-700 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+         <option value="">-- Select Country --</option>
+         <% if (typeof countries !== 'undefined' && countries.length > 0) { %>
+             <% countries.forEach(c => { %>
+                 <option value="<%= c %>" <%= (user.country && user.country === c) ? 'selected' : '' %>><%= c %></option>
+             <% }) %>
+         <% } %>
+      </select>
+    </div>
+
+    <div>
          <label for="avatar" class="block text-sm font-medium text-gray-300 mb-1">Profile Picture (Optional)</label>
          <div class="flex items-center space-x-4">
              <img src="<%= user.avatar && user.avatar.url ? user.avatar.url : '/images/default-avatar.png' %>" alt="Current Avatar" class="w-20 h-20 rounded-full object-cover bg-gray-600">
-             <input type="file" name="avatar" id="avatar" accept="image/*"
+             <input type="file" name="avatar" id="avatar" accept="image/jpeg, image/png, image/gif, image/webp"
                      class="w-full text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-500 file:text-white hover:file:bg-primary-600" />
          </div>
-         <p class="mt-1 text-xs text-gray-500">Recommended: Square image, JPG or PNG.</p>
+         <p class="mt-1 text-xs text-gray-500">Recommended: Square image (JPG, PNG, GIF, WEBP). Max 2MB.</p>
     </div>
 
-    <div class="pt-2 flex space-x-4">
+     <div class="pt-4 border-t border-gray-700">
+         <h3 class="text-lg font-semibold text-gray-200 mb-2">Integrations</h3>
+         <% if (user.githubId) { %>
+             <div class="flex items-center space-x-3">
+                <i class="fab fa-github fa-2x text-green-400"></i>
+                <div>
+                    <p class="text-green-400 font-medium">GitHub Account Linked</p>
+                    <p class="text-xs text-gray-500 mt-0.5">Your GitHub ID: <%= user.githubId %></p>
+                </div>
+             </div>
+         <% } else { %>
+             <a href="/users/auth/github" class="inline-flex items-center bg-gray-600 hover:bg-gray-500 text-white font-semibold px-4 py-2 rounded-md transition duration-150">
+                 <i class="fab fa-github mr-2"></i> Link GitHub Account
+             </a>
+             <p class="text-xs text-gray-500 mt-1">Link your GitHub account to easily import/export Gists.</p>
+         <% } %>
+     </div>
+
+    <div class="pt-4 flex space-x-4">
       <button type="submit" 
               class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition duration-150 ease-in-out text-lg flex items-center justify-center">
         <i class="fas fa-save mr-2"></i> Save Changes
       </button>
-      <a href="/users/profile" class="flex-1 text-center bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg transition duration-150 ease-in-out text-lg">
+      <a href="/<%= user.username.toLowerCase() %>" class="flex-1 text-center bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg transition duration-150 ease-in-out text-lg">
         Cancel
       </a>
     </div>
