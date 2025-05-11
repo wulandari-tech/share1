@@ -10,23 +10,23 @@ const CodeSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  snippetLanguage: { // Renamed from 'language'
+  snippetLanguage: {
     type: String,
     default: 'plaintext'
   },
-  fileUrl: { // URL from Cloudinary for EITHER uploaded file OR snippet text file
+  fileUrl: {
     type: String
   },
-  fileName: { // Original name of the uploaded file OR generated name for snippet text file
+  fileName: {
     type: String
   },
-  fileType: { // Mime type of the uploaded file OR 'text/plain' or similar for snippet
+  fileType: {
     type: String
   },
-  cloudinaryPublicId: { // To help with deleting from Cloudinary
+  cloudinaryPublicId: {
     type: String
   },
-  isSnippetTextFile: { // True if fileUrl points to a text snippet uploaded from CodeMirror
+  isSnippetTextFile: {
     type: Boolean,
     default: false
   },
@@ -42,9 +42,20 @@ const CodeSchema = new mongoose.Schema({
   views: {
     type: Number,
     default: 0
-  }
+  },
+  likes: [{ // <-- BARU
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, { timestamps: true });
 
 CodeSchema.index({ title: 'text', description: 'text' });
+
+CodeSchema.pre('remove', async function(next) {
+    // Nanti, jika ada comment model yang berelasi langsung di sini, hapus juga
+    // Contoh: await Comment.deleteMany({ codePost: this._id });
+    next();
+});
+
 
 module.exports = mongoose.model('Code', CodeSchema);

@@ -5,25 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'SHARE SOURCE CODE' %></title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/style.css">
 
-  <% if (typeof code !== 'undefined' || (typeof codes !== 'undefined' && codes && codes.length > 0 && (pageTitle.includes(codes[0].title) || pageTitle.includes("SHARE SOURCE CODE")) )) { %>
-    <!-- Specific for view page or pages showing code blocks -->
+  <% if (typeof code !== 'undefined' || (typeof codes !== 'undefined' && codes && codes.length > 0 && ( (typeof code !== 'undefined' && pageTitle.includes(code.title)) || pageTitle.includes("SHARE SOURCE CODE") || pageTitle.toLowerCase().includes("profile"))) ) { %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <!-- Add languages you expect, or use highlight.min.js which includes common ones -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/xml.min.js"></script> <!-- for HTML -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/xml.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/css.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/java.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
   <% } %>
   
-  <% if (pageTitle.toLowerCase().includes('upload') || pageTitle.toLowerCase().includes('edit')) { %>
-    <!-- CodeMirror for upload/edit pages -->
+  <% if (pageTitle && (pageTitle.toLowerCase().includes('upload') || pageTitle.toLowerCase().includes('edit'))) { %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
@@ -32,12 +29,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script> <!-- For C, C++, Java -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
   <% } %>
 
   <script>
     tailwind.config = {
-      darkMode: 'class', // or 'media'
+      darkMode: 'class',
       theme: {
         extend: {
           colors: {
@@ -53,7 +50,7 @@
   <style>
     .fade-out {
       animation: fadeOut 0.5s forwards;
-      animation-delay: 4.5s; /* Start fading out after 4.5 seconds */
+      animation-delay: 4.5s;
     }
     @keyframes fadeOut {
       from { opacity: 1; transform: translateY(0); }
@@ -66,8 +63,8 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <div class="flex items-center">
-          <a href="/" class="flex-shrink-0 text-2xl font-bold text-primary-400 hover:text-primary-300 transition-colors">
-            <i class="fas fa-code mr-2"></i>SHARE SOURCE CODE
+          <a href="/" class="flex-shrink-0 text-2xl font-extrabold hover:opacity-80 transition-opacity animated-gradient-text">
+            <i class="fas fa-code mr-2 opacity-70"></i>SHARE SOURCE CODE
           </a>
         </div>
         <div class="hidden md:block">
@@ -75,6 +72,7 @@
             <a href="/" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Home</a>
             <% if (currentUser) { %>
               <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Upload</a>
+              <a href="/users/profile" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">My Profile</a>
               <a href="/logout" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout (<%= currentUser.username %>)</a>
             <% } else { %>
               <a href="/login" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a>
@@ -96,6 +94,7 @@
         <a href="/" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Home</a>
         <% if (currentUser) { %>
           <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Upload</a>
+          <a href="/users/profile" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Profile</a>
           <a href="/logout" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Logout (<%= currentUser.username %>)</a>
         <% } else { %>
           <a href="/login" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Login</a>

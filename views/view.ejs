@@ -8,7 +8,7 @@
           <%= code.title %>
         </h1>
         <% if (currentUser && code.uploader && currentUser._id.toString() === code.uploader._id.toString()) { %>
-          <div class="flex space-x-3 flex-shrink-0 self-start sm:self-center">
+          <div class="flex space-x-3 flex-shrink-0 self-start sm:self-center mt-2 sm:mt-0">
             <a href="/codes/<%= code._id %>/edit" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-4 py-2 rounded-md transition duration-150 flex items-center">
               <i class="fas fa-edit mr-2"></i> Edit
             </a>
@@ -21,7 +21,7 @@
         <% } %>
       </div>
       <div class="mt-4 text-sm text-gray-400 flex flex-wrap gap-x-4 gap-y-2 items-center">
-        <span><i class="fas fa-user mr-1.5 text-primary-400"></i> By <%= code.uploader ? code.uploader.username : 'Unknown' %></span>
+        <span><i class="fas fa-user mr-1.5 text-primary-400"></i> By <a href="/users/<%= code.uploader._id %>" class="hover:underline"><%= code.uploader ? code.uploader.username : 'Unknown' %></a></span>
         <span><i class="fas fa-calendar-alt mr-1.5 text-primary-400"></i> <%= new Date(code.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></span>
         <span><i class="fas fa-tag mr-1.5 text-primary-400"></i> <span class="bg-gray-700 px-2 py-0.5 rounded-full text-xs"><%= code.snippetLanguage %></span></span>
         <span><i class="fas fa-eye mr-1.5 text-primary-400"></i> <%= code.views || 0 %> views</span>
@@ -61,10 +61,9 @@
     <% } else if (code.isSnippetTextFile && code.fetchedSnippetContent === null) { %>
         <div class="mb-8 bg-yellow-900 border border-yellow-700 text-yellow-300 px-4 py-3 rounded relative" role="alert">
             <strong class="font-bold">Note:</strong>
-            <span class="block sm:inline">The code snippet content could not be loaded. It might be unavailable or there was an issue fetching it.</span>
+            <span class="block sm:inline">The code snippet content could not be loaded.</span>
         </div>
     <% } %>
-
 
     <% if (code.fileUrl && !code.isSnippetTextFile) { %>
       <div class="mb-8">
@@ -86,6 +85,66 @@
       <iframe id="previewFrame" class="w-full h-96 rounded-lg border-2 border-gray-700 bg-white shadow-md"></iframe>
     </div>
 
+    <!-- Like Button -->
+    <div class="my-6 flex items-center">
+      <form action="/codes/<%= code._id %>/like" method="POST">
+        <% let userHasLiked = false; %>
+        <% if(currentUser && code.likes && code.likes.some(like => like.toString() === currentUser._id.toString())) { userHasLiked = true; } %>
+        <button type="submit" class="like-button <%= userHasLiked ? 'liked' : '' %> text-gray-400 hover:text-red-500 transition-colors duration-150 py-2 px-4 rounded-lg flex items-center text-lg bg-gray-700 hover:bg-gray-600">
+          <i class="fas fa-heart mr-2 <%= userHasLiked ? 'text-red-500' : 'text-gray-500' %>"></i> 
+          <span><%= userHasLiked ? 'Unlike' : 'Like' %></span>
+        </button>
+      </form>
+      <span class="ml-4 text-gray-400 text-lg"><%= code.likes ? code.likes.length : 0 %> Likes</span>
+    </div>
+
+    <!-- Comments Section -->
+    <div id="comments-section" class="mt-10 pt-6 border-t border-gray-700">
+      <h2 class="text-2xl font-semibold text-gray-100 mb-6">Comments (<%= comments.length %>)</h2>
+      <% if (currentUser) { %>
+        <form action="/codes/<%= code._id %>/comments" method="POST" class="mb-8 bg-gray-700 p-4 rounded-lg shadow">
+          <div class="mb-3">
+            <label for="commentText" class="block text-sm font-medium text-gray-300 mb-1">Add a comment</label>
+            <textarea name="comment[text]" id="commentText" rows="3" required
+                      class="w-full p-3 rounded-md bg-gray-600 border border-gray-500 text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="Write your thoughts..."></textarea>
+          </div>
+          <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-2.5 rounded-md transition duration-150">
+            <i class="fas fa-paper-plane mr-2"></i>Post Comment
+          </button>
+        </form>
+      <% } else { %>
+        <p class="mb-8 text-gray-400">
+          <a href="/login?redirect=/codes/view/<%= code._id %>" class="text-primary-400 hover:underline font-semibold">Login</a> to post a comment.
+        </p>
+      <% } %>
+
+      <div class="space-y-6">
+        <% if (comments.length > 0) { %>
+          <% comments.forEach(comment => { %>
+            <div class="comment bg-gray-700/50 p-4 rounded-lg shadow transition-shadow hover:shadow-md">
+              <div class="flex justify-between items-center mb-2">
+                <p class="text-sm text-gray-300 font-semibold">
+                  <a href="/users/<%= comment.author.id._id %>" class="hover:underline"><i class="fas fa-user text-primary-400 mr-1.5"></i><%= comment.author.username %></a>
+                </p>
+                <p class="text-xs text-gray-500"><%= new Date(comment.createdAt).toLocaleString() %></p>
+              </div>
+              <p class="text-gray-200 whitespace-pre-wrap"><%- comment.text.replace(/\n/g, '<br>') %></p>
+              <% if (currentUser && comment.author.id._id.toString() === currentUser._id.toString()) { %>
+                <form action="/codes/<%= code._id %>/comments/<%= comment._id %>?_method=DELETE" method="POST" class="mt-2 text-right" onsubmit="return confirm('Delete this comment?');">
+                  <button type="submit" class="text-xs text-red-500 hover:text-red-400 hover:underline">
+                    <i class="fas fa-trash-alt mr-1"></i>Delete
+                  </button>
+                </form>
+              <% } %>
+            </div>
+          <% }) %>
+        <% } else { %>
+          <p class="text-gray-500 italic">No comments yet. Be the first to comment!</p>
+        <% } %>
+      </div>
+    </div>
+
   </article>
 
   <div class="text-center mt-8">
@@ -98,7 +157,6 @@
 <div id="copy-toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-md opacity-0 transition-opacity duration-300 z-[100]">
   Code copied to clipboard!
 </div>
-
 
 <script>
   function getDisplayedCodeContent() {

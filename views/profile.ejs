@@ -1,0 +1,102 @@
+<%- include('./partials/header') %>
+
+<div class="max-w-5xl mx-auto">
+    <header class="mb-10 bg-gray-800 p-8 rounded-xl shadow-xl text-center">
+        <i class="fas fa-user-circle text-6xl text-primary-400 mb-4"></i>
+        <h1 class="text-4xl font-extrabold text-gray-100"><%= user.username %></h1>
+        <p class="text-lg text-gray-400 mt-2"><%= user.email %></p>
+        <p class="text-sm text-gray-500 mt-1">Joined: <%= new Date(user.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></p>
+        <% if (typeof isOwnProfile === 'undefined' || isOwnProfile) { %>
+            <!-- Nanti bisa tambahkan link edit profil di sini jika ada -->
+        <% } %>
+    </header>
+
+    <section>
+        <h2 class="text-3xl font-bold text-gray-200 mb-6 pb-2 border-b border-gray-700">
+            <%= (typeof isOwnProfile === 'undefined' || isOwnProfile) ? 'My Posts' : `${user.username}'s Public Posts` %>
+            (<%= codes.length > 0 ? codes.length : ( (typeof totalItems !== 'undefined' && totalItems > 0) ? totalItems : 0 ) %>)
+        </h2>
+
+        <% if (codes.length === 0) { %>
+            <div class="text-center py-10 bg-gray-800 rounded-lg shadow">
+                <i class="fas fa-box-open text-5xl text-gray-600 mb-3"></i>
+                <p class="text-xl text-gray-500">
+                    <%= (typeof isOwnProfile === 'undefined' || isOwnProfile) ? 'You haven\'t uploaded any code yet.' : `${user.username} hasn't uploaded any public code yet.` %>
+                </p>
+                <% if (typeof isOwnProfile === 'undefined' || isOwnProfile) { %>
+                    <a href="/codes/upload" class="mt-4 inline-block bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-md transition">
+                        Upload Your First Code
+                    </a>
+                <% } %>
+            </div>
+        <% } else { %>
+            <div class="space-y-6">
+                <% codes.forEach(code => { %>
+                    <div class="bg-gray-800 p-5 rounded-lg shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center hover:bg-gray-700/70 transition-colors">
+                        <div class="flex-grow mb-3 sm:mb-0">
+                            <div class="flex items-center mb-1.5">
+                                <span class="inline-block bg-primary-500 text-white text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider mr-3">
+                                    <%= code.snippetLanguage %>
+                                </span>
+                                <% if (!code.isPublic && (typeof isOwnProfile === 'undefined' || isOwnProfile) ) { %>
+                                  <span class="inline-flex items-center text-xs font-medium text-yellow-400">
+                                    <i class="fas fa-lock mr-1.5"></i> Private
+                                  </span>
+                                <% } %>
+                            </div>
+                            <a href="/codes/view/<%= code._id %>" class="text-xl font-bold text-gray-100 hover:text-primary-300 transition-colors block">
+                                <%= code.title %>
+                            </a>
+                            <p class="text-xs text-gray-500 mt-1">
+                                Uploaded: <%= new Date(code.createdAt).toLocaleDateString() %> |
+                                Views: <%= code.views || 0 %> |
+                                Likes: <%= code.likes ? code.likes.length : 0 %>
+                            </p>
+                        </div>
+                        <% if (typeof isOwnProfile === 'undefined' || isOwnProfile) { %>
+                            <div class="flex space-x-2 flex-shrink-0 self-start sm:self-center">
+                                <a href="/codes/view/<%= code._id %>" class="text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1.5 rounded-md flex items-center">
+                                    <i class="fas fa-eye mr-1.5"></i> View
+                                </a>
+                                <a href="/codes/<%= code._id %>/edit" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-medium px-3 py-1.5 rounded-md flex items-center">
+                                    <i class="fas fa-edit mr-1.5"></i> Edit
+                                </a>
+                                <form action="/codes/<%= code._id %>?_method=DELETE" method="POST" onsubmit="return confirm('Delete this post?');">
+                                    <button type="submit" class="text-sm bg-red-600 hover:bg-red-700 text-white font-medium px-3 py-1.5 rounded-md flex items-center">
+                                        <i class="fas fa-trash mr-1.5"></i> Delete
+                                    </button>
+                                </form>
+                            </div>
+                        <% } %>
+                    </div>
+                <% }) %>
+            </div>
+
+            <% if (lastPage > 1) { %>
+                <nav class="mt-10 flex justify-center items-center space-x-3" aria-label="Pagination">
+                    <% if (hasPreviousPage) { %>
+                        <a href="<%= profilePath %>?page=<%= previousPage %>" class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors">
+                            <i class="fas fa-arrow-left mr-2"></i> Previous
+                        </a>
+                    <% } %>
+                    <% for (let i = 1; i <= lastPage; i++) { %>
+                        <% if (i === currentPage) { %>
+                            <span class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md" aria-current="page"><%= i %></span>
+                        <% } else if (i === 1 || i === lastPage || (i >= currentPage - 2 && i <= currentPage + 2) ) { %>
+                             <a href="<%= profilePath %>?page=<%= i %>" class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors"><%= i %></a>
+                        <% } else if ( (i === currentPage - 3 && currentPage > 4) || (i === currentPage + 3 && currentPage < lastPage - 3) ) { %>
+                             <span class="px-4 py-2 text-sm font-medium text-gray-500">...</span>
+                        <% } %>
+                    <% } %>
+                    <% if (hasNextPage) { %>
+                        <a href="<%= profilePath %>?page=<%= nextPage %>" class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors">
+                            Next <i class="fas fa-arrow-right ml-2"></i>
+                        </a>
+                    <% } %>
+                </nav>
+            <% } %>
+        <% } %>
+    </section>
+</div>
+
+<%- include('./partials/footer') %>
