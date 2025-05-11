@@ -7,7 +7,9 @@ const UserSchema = new mongoose.Schema({
     required: [true, 'Username is required'],
     unique: true,
     trim: true,
-    minlength: [3, 'Username must be at least 3 characters long']
+    lowercase: true,
+    minlength: [3, 'Username must be at least 3 characters long'],
+    match: [/^[a-zA-Z0-9_.-]+$/, 'Username can only contain letters, numbers, dots, underscores, and hyphens']
   },
   email: {
     type: String,

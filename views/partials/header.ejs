@@ -8,30 +8,27 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/style.css">
-
-  <% if (typeof code !== 'undefined' || (typeof codes !== 'undefined' && codes && codes.length > 0 && ( (typeof code !== 'undefined' && pageTitle.includes(code.title)) || pageTitle.includes("SHARE SOURCE CODE") || pageTitle.toLowerCase().includes("profile"))) ) { %>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/xml.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/css.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/java.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
-  <% } %>
-  
-  <% if (pageTitle && (pageTitle.toLowerCase().includes('upload') || pageTitle.toLowerCase().includes('edit'))) { %>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
-  <% } %>
-
+    <% if ( (typeof code !== 'undefined' && code) || (typeof codes !== 'undefined' && codes && codes.length > 0 && ( (typeof code !== 'undefined' && pageTitle.includes(code.title)) || pageTitle.includes("SHARE SOURCE CODE") || (typeof profileData !== 'undefined' && profileData) )) ) { %>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/xml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/css.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/java.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+    <% } %>
+    <% if (pageTitle && (pageTitle.toLowerCase().includes('upload') || pageTitle.toLowerCase().includes('edit'))) { %>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+    <% } %>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -40,21 +37,30 @@
           colors: {
             primary: {"50":"#eff6ff","100":"#dbeafe","200":"#bfdbfe","300":"#93c5fd","400":"#60a5fa","500":"#3b82f6","600":"#2563eb","700":"#1d4ed8","800":"#1e40af","900":"#1e3a8a","950":"#172554"}
           },
-          fontFamily: {
-            'sans': ['Inter', 'sans-serif'],
-          },
+          fontFamily: { 'sans': ['Inter', 'sans-serif'] },
         }
       }
     }
   </script>
   <style>
-    .fade-out {
-      animation: fadeOut 0.5s forwards;
-      animation-delay: 4.5s;
-    }
-    @keyframes fadeOut {
-      from { opacity: 1; transform: translateY(0); }
-      to { opacity: 0; transform: translateY(-20px); }
+    .fade-out { animation: fadeOut 0.5s forwards; animation-delay: 4.5s; }
+    @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-20px); } }
+    .notification-badge {
+        position: absolute;
+        top: -6px;
+        right: -8px;
+        min-width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background-color: #ef4444;
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 5px;
+        border: 1px solid #111827;
     }
   </style>
 </head>
@@ -67,13 +73,33 @@
             <i class="fas fa-code mr-2 opacity-70"></i>SHARE SOURCE CODE
           </a>
         </div>
+        
+        <div class="flex-1 max-w-md mx-4 hidden md:block">
+            <form action="/users/search" method="GET" class="relative">
+                <input type="hidden" name="type" value="users">
+                <input type="search" name="q" id="desktop-search-q" placeholder="Search users..."
+                       class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 border border-gray-600 rounded-md py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-search text-gray-400"></i>
+                </div>
+            </form>
+        </div>
+
         <div class="hidden md:block">
-          <div class="ml-10 flex items-baseline space-x-4">
+          <div class="ml-4 flex items-center md:ml-6 space-x-4">
             <a href="/" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Home</a>
             <% if (currentUser) { %>
               <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Upload</a>
-              <a href="/users/profile" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">My Profile</a>
-              <a href="/logout" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout (<%= currentUser.username %>)</a>
+              <a href="/users/notifications" class="relative text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-bell"></i>
+                <% if (locals.unreadNotificationsCount && unreadNotificationsCount > 0) { %>
+                    <span class="notification-badge"><%= unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount %></span>
+                <% } %>
+              </a>
+              <a href="/<%= currentUser.username.toLowerCase() %>" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                My Profile
+              </a>
+              <a href="/logout" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>
             <% } else { %>
               <a href="/login" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a>
               <a href="/register" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Register</a>
@@ -91,11 +117,25 @@
 
     <div class="md:hidden hidden" id="mobile-menu">
       <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+        <form action="/users/search" method="GET" class="relative mb-3">
+            <input type="hidden" name="type" value="users">
+            <input type="search" name="q" id="mobile-search-q" placeholder="Search users..."
+                   class="w-full bg-gray-700 text-gray-200 placeholder-gray-400 border border-gray-600 rounded-md py-2 pl-10 pr-4 focus:outline-none focus:ring-primary-500 text-sm">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i class="fas fa-search text-gray-400"></i>
+            </div>
+        </form>
         <a href="/" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Home</a>
         <% if (currentUser) { %>
           <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Upload</a>
-          <a href="/users/profile" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Profile</a>
-          <a href="/logout" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Logout (<%= currentUser.username %>)</a>
+          <a href="/users/notifications" class="relative text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">
+            <i class="fas fa-bell"></i> Notifications
+            <% if (locals.unreadNotificationsCount && unreadNotificationsCount > 0) { %>
+                <span class="notification-badge" style="top: 2px; right: 2px;"><%= unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount %></span>
+            <% } %>
+          </a>
+          <a href="/<%= currentUser.username.toLowerCase() %>" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Profile</a>
+          <a href="/logout" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Logout</a>
         <% } else { %>
           <a href="/login" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Login</a>
           <a href="/register" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Register</a>
@@ -103,6 +143,5 @@
       </div>
     </div>
   </nav>
-
   <main class="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <%- include('./flash') %>

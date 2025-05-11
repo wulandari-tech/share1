@@ -2,94 +2,15 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/user');
 const Code = require('../models/code');
+const Notification = require('../models/notification');
 const { isLoggedIn } = require('../middleware');
 const { upload, cloudinary } = require('../config/cloudinary');
 const mongoose = require('mongoose');
+
 const ITEMS_PER_PAGE_PROFILE = 8;
+const ITEMS_PER_PAGE_NOTIF = 15;
+const ITEMS_PER_PAGE_SEARCH = 10;
 
-const populateFollowsAndCounts = async (userId) => {
-    const user = await User.findById(userId)
-        .populate('followers', 'username avatar.url _id') // Select specific fields
-        .populate('following', 'username avatar.url _id') // Select specific fields
-        .lean(); // Use lean for plain JS object
-
-    if (user) {
-        // Ensure followers and following are arrays, even if empty from populate
-        user.followers = user.followers || [];
-        user.following = user.following || [];
-        // Add counts directly to the user object
-        user.followerCount = user.followers.length;
-        user.followingCount = user.following.length;
-        user.postCount = await Code.countDocuments({ uploader: userId });
-        user.likedPostCount = await Code.countDocuments({ likes: userId, isPublic: true }); // Count public liked posts
-    }
-    return user;
-};
-
-router.get('/profile', isLoggedIn, async (req, res, next) => {
-    try {
-        const userProfileData = await populateFollowsAndCounts(req.session.user._id);
-        if (!userProfileData) {
-            req.flash('error', 'User not found.');
-            return res.redirect('/');
-        }
-
-        const page = +req.query.page || 1;
-        const tab = req.query.tab || 'posts';
-        let items = [];
-        let totalItemsInTab = 0;
-        let query = {};
-        const currentPathBase = `/users/profile`; // Path dasar untuk link paginasi
-
-        if (tab === 'posts') {
-            query = { uploader: req.session.user._id };
-            totalItemsInTab = await Code.countDocuments(query);
-            items = await Code.find(query)
-                .sort({ createdAt: -1 })
-                .skip((page - 1) * ITEMS_PER_PAGE_PROFILE)
-                .limit(ITEMS_PER_PAGE_PROFILE)
-                .populate('uploader', 'username avatar.url')
-                .lean();
-        } else if (tab === 'liked') {
-            query = { likes: req.session.user._id }; // Bisa private atau public yang dia like
-            totalItemsInTab = await Code.countDocuments(query);
-            items = await Code.find(query)
-                .sort({ createdAt: -1 })
-                .skip((page - 1) * ITEMS_PER_PAGE_PROFILE)
-                .limit(ITEMS_PER_PAGE_PROFILE)
-                .populate('uploader', 'username avatar.url')
-                .lean();
-        } else if (tab === 'followers') {
-            totalItemsInTab = userProfileData.followerCount;
-            const start = (page - 1) * ITEMS_PER_PAGE_PROFILE;
-            const end = start + ITEMS_PER_PAGE_PROFILE;
-            items = userProfileData.followers.slice(start, end);
-        } else if (tab === 'following') {
-            totalItemsInTab = userProfileData.followingCount;
-            const start = (page - 1) * ITEMS_PER_PAGE_PROFILE;
-            const end = start + ITEMS_PER_PAGE_PROFILE;
-            items = userProfileData.following.slice(start, end);
-        }
-
-        res.render('profile', {
-            user: req.session.user, // currentUser from session
-            profileData: userProfileData, // The user whose profile is being viewed
-            items,
-            tab,
-            pageTitle: `${userProfileData.username}'s Profile - SHARE SOURCE CODE`,
-            isOwnProfile: true,
-            currentPage: page,
-            hasNextPage: ITEMS_PER_PAGE_PROFILE * page < totalItemsInTab,
-            hasPreviousPage: page > 1,
-            nextPage: page + 1,
-            previousPage: page - 1,
-            lastPage: Math.ceil(totalItemsInTab / ITEMS_PER_PAGE_PROFILE),
-            profilePathBase: currentPathBase
-        });
-    } catch (err) {
-        next(err);
-    }
-});
 
 router.get('/profile/edit', isLoggedIn, async (req, res, next) => {
     try {
@@ -112,30 +33,34 @@ router.post('/profile/edit', isLoggedIn, upload.single('avatar'), async (req, re
         const userToUpdate = await User.findById(req.session.user._id);
         if (!userToUpdate) {
             req.flash('error', 'User not found.');
+            if (req.file && req.file.filename) await cloudinary.uploader.destroy(req.file.filename);
             return res.redirect('/');
         }
 
         const { username, email, bio } = req.body;
-        let updateData = { bio: bio || '' }; // Ensure bio is not undefined
+        let updateData = { bio: bio || '' };
 
-        if (username && username.trim() !== userToUpdate.username) {
-            const existingUserByUsername = await User.findOne({ username: username.trim(), _id: { $ne: userToUpdate._id } });
+        const newUsername = username ? username.trim().toLowerCase() : null;
+        const newEmail = email ? email.toLowerCase().trim() : null;
+
+        if (newUsername && newUsername !== userToUpdate.username) {
+            const existingUserByUsername = await User.findOne({ username: newUsername, _id: { $ne: userToUpdate._id } });
             if (existingUserByUsername) {
                 req.flash('error', 'Username already taken.');
                 if (req.file && req.file.filename) await cloudinary.uploader.destroy(req.file.filename);
                 return res.redirect('/users/profile/edit');
             }
-            updateData.username = username.trim();
+            updateData.username = newUsername;
         }
 
-        if (email && email.toLowerCase().trim() !== userToUpdate.email) {
-            const existingUserByEmail = await User.findOne({ email: email.toLowerCase().trim(), _id: { $ne: userToUpdate._id } });
+        if (newEmail && newEmail !== userToUpdate.email) {
+            const existingUserByEmail = await User.findOne({ email: newEmail, _id: { $ne: userToUpdate._id } });
             if (existingUserByEmail) {
                 req.flash('error', 'Email already taken.');
                 if (req.file && req.file.filename) await cloudinary.uploader.destroy(req.file.filename);
                 return res.redirect('/users/profile/edit');
             }
-            updateData.email = email.toLowerCase().trim();
+            updateData.email = newEmail;
         }
 
         if (req.file) {
@@ -152,10 +77,12 @@ router.post('/profile/edit', isLoggedIn, upload.single('avatar'), async (req, re
 
         req.session.user.username = updatedUser.username;
         req.session.user.email = updatedUser.email;
-        // req.session.user.avatar_url = updatedUser.avatar.url; // If you store avatar in session
+        if (updatedUser.avatar && updatedUser.avatar.url) {
+          req.session.user.avatar_url = updatedUser.avatar.url;
+        }
 
         req.flash('success', 'Profile updated successfully!');
-        res.redirect('/users/profile');
+        res.redirect(`/${updatedUser.username.toLowerCase()}`);
 
     } catch (err) {
         if (req.file && req.file.filename) {
@@ -165,98 +92,21 @@ router.post('/profile/edit', isLoggedIn, upload.single('avatar'), async (req, re
             let errors = Object.values(err.errors).map(val => val.message);
             req.flash('error', errors.join(', '));
         } else {
+            console.error("Profile Edit Error:", err);
             req.flash('error', 'Could not update profile.');
         }
         res.redirect('/users/profile/edit');
     }
 });
 
-router.get('/:userId', async (req, res, next) => {
+router.post('/:userIdToFollow/follow', isLoggedIn, async (req, res, next) => {
+    const backURL = req.header('Referer') || '/';
     try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.userId)) {
-            req.flash('error', 'Invalid user ID format.');
-            return res.redirect('/');
-        }
-        if (req.session.user && req.session.user._id.toString() === req.params.userId.toString()) {
-            return res.redirect('/users/profile');
-        }
-
-        const profileUserData = await populateFollowsAndCounts(req.params.userId);
-        if (!profileUserData) {
-            req.flash('error', 'User not found.');
-            return res.redirect('/');
-        }
-
-        const page = +req.query.page || 1;
-        const tab = req.query.tab || 'posts';
-        let items = [];
-        let totalItemsInTab = 0;
-        let query = {};
-        const currentPathBase = `/users/${req.params.userId}`;
-
-        if (tab === 'posts') {
-            query = { uploader: req.params.userId, isPublic: true };
-            totalItemsInTab = await Code.countDocuments(query);
-            items = await Code.find(query)
-                .sort({ createdAt: -1 })
-                .skip((page - 1) * ITEMS_PER_PAGE_PROFILE)
-                .limit(ITEMS_PER_PAGE_PROFILE)
-                .populate('uploader', 'username avatar.url')
-                .lean();
-        } else if (tab === 'liked') {
-            query = { likes: req.params.userId, isPublic: true };
-            totalItemsInTab = await Code.countDocuments(query);
-            items = await Code.find(query)
-                .sort({ createdAt: -1 })
-                .skip((page - 1) * ITEMS_PER_PAGE_PROFILE)
-                .limit(ITEMS_PER_PAGE_PROFILE)
-                .populate('uploader', 'username avatar.url')
-                .lean();
-        } else if (tab === 'followers') {
-            totalItemsInTab = profileUserData.followerCount;
-            const start = (page - 1) * ITEMS_PER_PAGE_PROFILE;
-            const end = start + ITEMS_PER_PAGE_PROFILE;
-            items = profileUserData.followers.slice(start, end);
-        } else if (tab === 'following') {
-            totalItemsInTab = profileUserData.followingCount;
-            const start = (page - 1) * ITEMS_PER_PAGE_PROFILE;
-            const end = start + ITEMS_PER_PAGE_PROFILE;
-            items = profileUserData.following.slice(start, end);
-        }
-
-        res.render('profile', {
-            user: req.session.user,
-            profileData: profileUserData,
-            items,
-            tab,
-            pageTitle: `${profileUserData.username}'s Profile - SHARE SOURCE CODE`,
-            isOwnProfile: false,
-            currentPage: page,
-            hasNextPage: ITEMS_PER_PAGE_PROFILE * page < totalItemsInTab,
-            hasPreviousPage: page > 1,
-            nextPage: page + 1,
-            previousPage: page - 1,
-            lastPage: Math.ceil(totalItemsInTab / ITEMS_PER_PAGE_PROFILE),
-            profilePathBase: currentPathBase
-        });
-
-    } catch (err) {
-        if (err.kind === 'ObjectId' && err.path === '_id') { // More specific check
-             req.flash('error', 'User not found (invalid ID).');
-             return res.redirect('/');
-        }
-        next(err);
-    }
-});
-
-router.post('/:userId/follow', isLoggedIn, async (req, res, next) => {
-    const backURL = req.header('Referer') || `/users/${req.params.userId}`;
-    try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.userId)) {
+        if (!mongoose.Types.ObjectId.isValid(req.params.userIdToFollow)) {
             req.flash('error', 'Invalid user ID to follow.');
             return res.redirect(backURL);
         }
-        const userToFollowId = new mongoose.Types.ObjectId(req.params.userId);
+        const userToFollowId = new mongoose.Types.ObjectId(req.params.userIdToFollow);
         const currentUserId = new mongoose.Types.ObjectId(req.session.user._id);
 
         if (currentUserId.equals(userToFollowId)) {
@@ -273,6 +123,7 @@ router.post('/:userId/follow', isLoggedIn, async (req, res, next) => {
         }
 
         const isFollowing = currentUser.following.some(id => id.equals(userToFollowId));
+        let notification;
 
         if (isFollowing) {
             currentUser.following.pull(userToFollowId);
@@ -281,16 +132,152 @@ router.post('/:userId/follow', isLoggedIn, async (req, res, next) => {
         } else {
             currentUser.following.push(userToFollowId);
             userToFollow.followers.push(currentUserId);
+            
+            notification = new Notification({
+                recipient: userToFollow._id,
+                sender: currentUser._id,
+                type: 'follow',
+            });
             req.flash('success', `You are now following ${userToFollow.username}.`);
         }
 
         await currentUser.save();
         await userToFollow.save();
+        if (notification) await notification.save();
+
         res.redirect(backURL);
 
     } catch (err) {
+        console.error("Follow error:", err);
         req.flash('error', 'Could not process follow request.');
         res.redirect(backURL);
+    }
+});
+
+router.get('/notifications', isLoggedIn, async (req, res, next) => {
+    try {
+        const page = +req.query.page || 1;
+        const query = { recipient: req.session.user._id };
+
+        const totalNotifications = await Notification.countDocuments(query);
+        const notifications = await Notification.find(query)
+            .populate('sender', 'username avatar.url _id')
+            .populate('targetPost', 'title _id uploader')
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * ITEMS_PER_PAGE_NOTIF)
+            .limit(ITEMS_PER_PAGE_NOTIF)
+            .lean();
+        
+        const unreadCount = await Notification.countDocuments({ recipient: req.session.user._id, isRead: false });
+
+        res.render('notifications', {
+            pageTitle: 'Your Notifications - SHARE SOURCE CODE',
+            notifications,
+            currentPage: page,
+            hasNextPage: ITEMS_PER_PAGE_NOTIF * page < totalNotifications,
+            hasPreviousPage: page > 1,
+            nextPage: page + 1,
+            previousPage: page - 1,
+            lastPage: Math.ceil(totalNotifications / ITEMS_PER_PAGE_NOTIF),
+            unreadNotificationsCount: unreadCount
+        });
+
+        const notificationIdsToMarkRead = notifications.filter(n => !n.isRead).map(n => n._id);
+        if (notificationIdsToMarkRead.length > 0) {
+            await Notification.updateMany(
+                { _id: { $in: notificationIdsToMarkRead }, recipient: req.session.user._id },
+                { $set: { isRead: true } }
+            );
+        }
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/notifications/:notifId/read', isLoggedIn, async (req, res) => {
+    try {
+        const notification = await Notification.findOneAndUpdate(
+            { _id: req.params.notifId, recipient: req.session.user._id },
+            { $set: { isRead: true } },
+            { new: true }
+        ).populate('targetPost', '_id').populate('sender', 'username');
+
+        if (notification) {
+            if (req.query.redirect === 'true') {
+                if (notification.targetPost && notification.targetPost._id) {
+                    return res.redirect(`/codes/view/${notification.targetPost._id}`);
+                } else if (notification.type === 'follow' && notification.sender && notification.sender.username) {
+                    return res.redirect(`/${notification.sender.username.toLowerCase()}`);
+                }
+            }
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Error marking notification read:", error);
+        res.status(500).json({ success: false, message: 'Failed to mark as read' });
+    }
+});
+
+router.get('/search', async (req, res, next) => {
+    try {
+        const query = req.query.q || '';
+        const page = +req.query.page || 1;
+        const searchType = req.query.type || 'codes';
+        
+        let results = [];
+        let totalItems = 0;
+        let searchTitle = `Search Results`;
+        const backURL = req.header('Referer') || '/';
+
+        if (query.trim() === '') {
+            req.flash('error', 'Please enter a search term.');
+            return res.redirect(backURL);
+        }
+
+        searchTitle = `${searchType === 'users' ? 'User' : 'Code'} Search for "${query}"`;
+
+        if (searchType === 'users') {
+            const userSearchQuery = { username: { $regex: query, $options: 'i' } };
+            totalItems = await User.countDocuments(userSearchQuery);
+            results = await User.find(userSearchQuery)
+                .select('username bio avatar.url createdAt')
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * ITEMS_PER_PAGE_SEARCH)
+                .limit(ITEMS_PER_PAGE_SEARCH)
+                .lean();
+        } else {
+            const codeSearchQuery = {
+                isPublic: true,
+                $or: [
+                    { title: { $regex: query, $options: 'i' } },
+                    { description: { $regex: query, $options: 'i' } },
+                    { snippetLanguage: { $regex: query, $options: 'i' } }
+                ]
+            };
+            totalItems = await Code.countDocuments(codeSearchQuery);
+            results = await Code.find(codeSearchQuery)
+                .populate('uploader', 'username avatar.url')
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * ITEMS_PER_PAGE_SEARCH)
+                .limit(ITEMS_PER_PAGE_SEARCH)
+                .lean();
+        }
+
+        res.render('search-results', {
+            pageTitle: searchTitle,
+            query,
+            searchType,
+            results,
+            currentPage: page,
+            hasNextPage: ITEMS_PER_PAGE_SEARCH * page < totalItems,
+            hasPreviousPage: page > 1,
+            nextPage: page + 1,
+            previousPage: page - 1,
+            lastPage: Math.ceil(totalItems / ITEMS_PER_PAGE_SEARCH)
+        });
+
+    } catch (err) {
+        next(err);
     }
 });
 

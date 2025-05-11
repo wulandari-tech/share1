@@ -1,0 +1,106 @@
+<%- include('./partials/header') %>
+
+<div class="max-w-5xl mx-auto">
+    <header class="mb-8">
+        <h1 class="text-3xl md:text-4xl font-extrabold text-gray-100">
+            <%= pageTitle %>
+        </h1>
+        <% if (query) { %>
+            <p class="text-lg text-gray-400 mt-1">Showing results for: <span class="font-semibold text-primary-300">"<%= query %>"</span></p>
+        <% } %>
+    </header>
+
+    <div class="mb-6">
+        <form action="/users/search" method="GET" class="flex items-center space-x-3">
+            <input type="text" name="q" value="<%= query %>" placeholder="Search codes or users..."
+                   class="flex-grow p-3 rounded-md bg-gray-700 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+            <select name="type" class="p-3 rounded-md bg-gray-700 border border-gray-600 text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                <option value="codes" <%= searchType === 'codes' ? 'selected' : '' %>>Search Codes</option>
+                <option value="users" <%= searchType === 'users' ? 'selected' : '' %>>Search Users</option>
+            </select>
+            <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-md transition duration-150">
+                <i class="fas fa-search mr-2"></i>Search
+            </button>
+        </form>
+    </div>
+
+
+    <% if (!results || results.length === 0) { %>
+        <div class="text-center py-12 bg-gray-800 rounded-lg shadow-md">
+            <i class="fas fa-search-minus text-5xl text-gray-600 mb-4"></i>
+            <p class="text-xl text-gray-500">No <%= searchType === 'users' ? 'users' : 'codes' %> found matching your criteria.</p>
+        </div>
+    <% } else { %>
+        <% if (searchType === 'users') { %>
+            <div class="space-y-5">
+                <% results.forEach(person => { %>
+                    <a href="/<%= person.username.toLowerCase() %>" class="flex items-center bg-gray-800 p-4 rounded-lg shadow-md hover:bg-gray-700/70 transition-colors">
+                        <img src="<%= person.avatar && person.avatar.url ? person.avatar.url : '/images/default-avatar.png' %>" alt="<%= person.username %>" class="w-16 h-16 rounded-full object-cover mr-4 border-2 border-gray-700">
+                        <div>
+                            <h3 class="text-xl font-semibold text-primary-300 hover:underline"><%= person.username %></h3>
+                            <% if (person.bio) { %>
+                                <p class="text-sm text-gray-400 mt-1 truncate"><%= person.bio %></p>
+                            <% } %>
+                            <p class="text-xs text-gray-500 mt-1">Joined: <%= new Date(person.createdAt).toLocaleDateString() %></p>
+                        </div>
+                    </a>
+                <% }) %>
+            </div>
+        <% } else { %>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <% results.forEach(code => { %>
+                    <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.015] flex flex-col">
+                        <div class="p-5 flex-grow">
+                            <div class="flex justify-between items-start mb-2.5">
+                                <span class="inline-block bg-primary-600 text-white text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                    <%= code.snippetLanguage %>
+                                </span>
+                            </div>
+                            <a href="/codes/view/<%= code._id %>" class="block mb-1.5">
+                                <h3 class="text-xl font-bold text-gray-100 hover:text-primary-300 transition-colors">
+                                    <%= code.title %>
+                                </h3>
+                            </a>
+                            <p class="text-gray-400 text-sm mb-3 h-12 overflow-hidden">
+                                <%= code.description && code.description.length > 70 ? code.description.slice(0, 70) + '...' : (code.description || 'No description.') %>
+                            </p>
+                        </div>
+                        <div class="border-t border-gray-700 p-3 bg-gray-800/50">
+                            <div class="flex justify-between items-center text-xs text-gray-500">
+                                <span><i class="fas fa-user mr-1"></i> <a href="/<%= code.uploader.username.toLowerCase() %>" class="hover:underline"><%= code.uploader.username %></a></span>
+                                <span><i class="fas fa-eye mr-1"></i> <%= code.views || 0 %></span>
+                                <span><i class="fas fa-thumbs-up mr-1"></i> <%= code.likes ? code.likes.length : 0 %></span>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } %>
+
+        <% if (lastPage > 1) { %>
+            <nav class="mt-10 flex justify-center items-center space-x-3 pagination-nav" aria-label="Pagination">
+                <% if (hasPreviousPage) { %>
+                    <a href="/users/search?q=<%= encodeURIComponent(query) %>&type=<%= searchType %>&page=<%= previousPage %>">
+                        <i class="fas fa-arrow-left mr-2"></i> Previous
+                    </a>
+                <% } %>
+                <% for (let i = 1; i <= lastPage; i++) { %>
+                    <% if (i === currentPage) { %>
+                        <span class="current-page"><%= i %></span>
+                    <% } else if (i === 1 || i === lastPage || (i >= currentPage - 1 && i <= currentPage + 1) || (currentPage <=2 && i <=3) || (currentPage >=lastPage-1 && i >= lastPage-2) ) { %>
+                         <a href="/users/search?q=<%= encodeURIComponent(query) %>&type=<%= searchType %>&page=<%= i %>"><%= i %></a>
+                    <% } else if ( (i === currentPage - 2 && currentPage > 3) || (i === currentPage + 2 && currentPage < lastPage - 2) ) { %>
+                         <span class="ellipsis">...</span>
+                    <% } %>
+                <% } %>
+                <% if (hasNextPage) { %>
+                    <a href="/users/search?q=<%= encodeURIComponent(query) %>&type=<%= searchType %>&page=<%= nextPage %>">
+                        Next <i class="fas fa-arrow-right ml-2"></i>
+                    </a>
+                <% } %>
+            </nav>
+        <% } %>
+    <% } %>
+</div>
+
+<%- include('./partials/footer') %>

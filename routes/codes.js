@@ -2,12 +2,15 @@ const express = require('express');
 const router = express.Router();
 const Code = require('../models/code');
 const Comment = require('../models/comment');
+const Notification = require('../models/notification');
+const User = require('../models/user'); // Diperlukan untuk populate sender di notif
 const { cloudinary, upload } = require('../config/cloudinary');
 const { isLoggedIn, isAuthor } = require('../middleware');
 const tmp = require('tmp');
 const fs = require('fs-extra');
 const path = require('path');
 const axios = require('axios');
+const mongoose = require('mongoose');
 
 function getFileExtensionForSnippet(language) {
   const langMap = {
@@ -92,6 +95,7 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
     if (err.http_code && err.message) {
         req.flash('error', `Cloudinary error: ${err.message}`);
     } else {
+        console.error("Upload POST Error:", err);
         req.flash('error', `Upload failed: ${err.message || 'Unknown error'}`);
     }
     const backURLReferer = req.header('Referer') || '/codes/upload';
@@ -105,12 +109,17 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
 
 router.get('/view/:id', async (req, res, next) => {
   try {
-    const codeDocument = await Code.findById(req.params.id).populate('uploader', 'username');
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        req.flash('error', 'Invalid Post ID.');
+        return res.redirect('/');
+    }
+    const codeDocument = await Code.findById(req.params.id).populate('uploader', 'username avatar.url _id');
     if (!codeDocument) {
       req.flash('error', 'Code not found.');
       return res.redirect('/');
     }
-    const code = codeDocument.toObject();
+    
+    const code = codeDocument.toObject(); // Konversi ke objek biasa untuk modifikasi
 
     if (!code.isPublic && (!req.session.user || !code.uploader._id.toString() === (req.session.user._id).toString() )) {
       req.flash('error', 'This code is private.');
@@ -120,7 +129,7 @@ router.get('/view/:id', async (req, res, next) => {
     let fetchedSnippetContent = null;
     if (code.fileUrl && code.isSnippetTextFile) {
       try {
-        const response = await axios.get(code.fileUrl, { timeout: 7000 }); // Increased timeout
+        const response = await axios.get(code.fileUrl, { timeout: 7000 });
         fetchedSnippetContent = response.data;
       } catch (fetchErr) {
         console.error(`Fetch snippet content error from ${code.fileUrl}:`, fetchErr.message);
@@ -128,8 +137,18 @@ router.get('/view/:id', async (req, res, next) => {
       }
     }
     
-    const comments = await Comment.find({ codePost: code._id }).populate('author.id', 'username').sort({ createdAt: -1 }).lean();
-    await Code.updateOne({ _id: req.params.id }, { $inc: { views: 1 } });
+    const comments = await Comment.find({ codePost: code._id })
+        .populate('author.id', 'username avatar.url _id')
+        .sort({ createdAt: -1 })
+        .lean();
+
+    if (req.session.user && code.uploader._id.toString() !== req.session.user._id.toString()) {
+        if(!codeDocument.views) codeDocument.views = 0;
+        codeDocument.views += 1;
+        await codeDocument.save();
+        code.views = codeDocument.views; // Update objek 'code' dengan views baru
+    }
+
 
     res.render('view', {
       code: { ...code, fetchedSnippetContent },
@@ -202,7 +221,6 @@ router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res,
         codeToUpdate.cloudinaryPublicId = null;
         codeToUpdate.isSnippetTextFile = false;
     } else if (snippetContentFromForm) {
-        // Only delete old if it's being replaced by a new snippet or if it wasn't a snippet text file before
         if (oldCloudinaryPublicId && (oldCloudinaryPublicId !== codeToUpdate.cloudinaryPublicId || !codeToUpdate.isSnippetTextFile)) {
             await deleteFromCloudinary(oldCloudinaryPublicId, oldIsSnippetTextFile ? "raw" : "auto");
         }
@@ -239,6 +257,7 @@ router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res,
     if (err.http_code && err.message) {
         req.flash('error', `Cloudinary error: ${err.message}`);
     } else {
+        console.error("Code PUT Error:", err);
         req.flash('error', `Update failed: ${err.message || 'Unknown error'}`);
     }
     const backURLReferer = req.header('Referer') || `/codes/${req.params.id}/edit`;
@@ -257,8 +276,9 @@ router.delete('/:id', isLoggedIn, isAuthor, async (req, res, next) => {
         await deleteFromCloudinary(codeToDelete.cloudinaryPublicId, codeToDelete.isSnippetTextFile ? "raw" : "auto");
     }
     await Comment.deleteMany({ codePost: codeToDelete._id });
+    await Notification.deleteMany({ targetPost: codeToDelete._id }); // Hapus notifikasi terkait postingan
     await Code.findByIdAndRemove(req.params.id);
-    req.flash('success', 'Code/File and associated comments deleted successfully!');
+    req.flash('success', 'Code/File and associated data deleted successfully!');
     res.redirect('/');
   } catch (err) {
     next(err);
@@ -267,6 +287,10 @@ router.delete('/:id', isLoggedIn, isAuthor, async (req, res, next) => {
 
 router.get('/:id/download-snippet', async (req, res, next) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        req.flash('error', 'Invalid Post ID.');
+        return res.redirect(req.header('Referer') || '/');
+    }
     const code = await Code.findById(req.params.id).lean();
     const backURL = req.header('Referer') || `/codes/view/${req.params.id}`;
 
@@ -274,7 +298,7 @@ router.get('/:id/download-snippet', async (req, res, next) => {
       req.flash('error', 'Code not found.');
       return res.redirect(backURL);
     }
-    if (!code.isPublic && (!req.session.user || !code.uploader._id.toString() === (req.session.user._id).toString())) {
+    if (!code.isPublic && (!req.session.user || !code.uploader.toString() === (req.session.user._id).toString())) {
       req.flash('error', 'This code is private.');
       return res.redirect('/');
     }
@@ -293,25 +317,41 @@ router.get('/:id/download-snippet', async (req, res, next) => {
 router.post('/:id/like', isLoggedIn, async (req, res, next) => {
     const backURL = req.header('Referer') || `/codes/view/${req.params.id}`;
     try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            req.flash('error', 'Invalid Post ID.');
+            return res.redirect(backURL);
+        }
         const code = await Code.findById(req.params.id);
         if (!code) {
             req.flash('error', 'Code not found.');
             return res.redirect(backURL);
         }
 
-        const userId = req.session.user._id;
+        const userId = new mongoose.Types.ObjectId(req.session.user._id);
         const userIndexInLikes = code.likes.findIndex(id => id.equals(userId));
+        let notification;
 
         if (userIndexInLikes > -1) {
             code.likes.splice(userIndexInLikes, 1);
             req.flash('success', 'Post unliked!');
         } else {
             code.likes.push(userId);
+            if (!code.uploader.equals(userId)) {
+                notification = new Notification({
+                    recipient: code.uploader,
+                    sender: userId,
+                    type: 'like',
+                    targetPost: code._id,
+                });
+            }
             req.flash('success', 'Post liked!');
         }
         await code.save();
+        if (notification) await notification.save();
+
         res.redirect(backURL);
     } catch (err) {
+        console.error("Like Error:", err);
         req.flash('error', 'Could not update like status.');
         res.redirect(backURL);
     }
@@ -320,6 +360,10 @@ router.post('/:id/like', isLoggedIn, async (req, res, next) => {
 router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
     const backURL = req.header('Referer') || `/codes/view/${req.params.id}`;
     try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            req.flash('error', 'Invalid Post ID.');
+            return res.redirect(backURL);
+        }
         const code = await Code.findById(req.params.id);
         if (!code) {
             req.flash('error', 'Code not found.');
@@ -339,6 +383,17 @@ router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
             codePost: code._id
         });
         await newComment.save();
+        
+        let notification;
+        if (!code.uploader.equals(req.session.user._id)) {
+            notification = new Notification({
+                recipient: code.uploader,
+                sender: req.session.user._id,
+                type: 'comment',
+                targetPost: code._id,
+            });
+            await notification.save();
+        }
         req.flash('success', 'Comment added successfully!');
         res.redirect(backURL + '#comments-section');
     } catch (err) {
@@ -346,6 +401,7 @@ router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
             let errors = Object.values(err.errors).map(val => val.message);
             req.flash('error', errors.join(', '));
         } else {
+            console.error("Comment POST Error:", err);
             req.flash('error', 'Could not add comment.');
         }
         res.redirect(backURL);
@@ -355,19 +411,28 @@ router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
 router.delete('/:id/comments/:comment_id', isLoggedIn, async (req, res, next) => {
     const backURL = req.header('Referer') || `/codes/view/${req.params.id}`;
     try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id) || !mongoose.Types.ObjectId.isValid(req.params.comment_id)) {
+            req.flash('error', 'Invalid ID.');
+            return res.redirect(backURL);
+        }
         const comment = await Comment.findById(req.params.comment_id);
         if (!comment) {
             req.flash('error', 'Comment not found.');
             return res.redirect(backURL);
         }
         if (!comment.author.id.equals(req.session.user._id)) {
-            req.flash('error', 'You are not authorized to delete this comment.');
-            return res.redirect(backURL);
+            // Di sini juga bisa ditambahkan pengecekan apakah currentUser adalah pemilik postingan kode
+            const codePost = await Code.findById(req.params.id);
+            if (!codePost || !codePost.uploader.equals(req.session.user._id)) {
+                 req.flash('error', 'You are not authorized to delete this comment.');
+                 return res.redirect(backURL);
+            }
         }
         await Comment.findByIdAndRemove(req.params.comment_id);
         req.flash('success', 'Comment deleted successfully!');
         res.redirect(backURL + '#comments-section');
     } catch (err) {
+        console.error("Comment DELETE Error:", err);
         req.flash('error', 'Could not delete comment.');
         res.redirect(backURL);
     }
