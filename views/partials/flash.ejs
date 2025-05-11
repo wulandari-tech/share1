@@ -1,0 +1,17 @@
+<% if (success && success.length > 0) { %>
+  <div class="flash-message fixed top-20 right-5 z-[100] bg-green-500 text-white p-4 rounded-lg shadow-xl text-sm max-w-md fade-out" role="alert">
+    <div class="flex items-center">
+      <i class="fas fa-check-circle mr-3 text-xl"></i>
+      <span><%= success %></span>
+    </div>
+  </div>
+<% } %>
+
+<% if (error && error.length > 0) { %>
+  <div class="flash-message fixed top-20 right-5 z-[100] bg-red-500 text-white p-4 rounded-lg shadow-xl text-sm max-w-md fade-out" role="alert">
+    <div class="flex items-center">
+      <i class="fas fa-exclamation-circle mr-3 text-xl"></i>
+      <span><%= error %></span>
+    </div>
+  </div>
+<% } %>

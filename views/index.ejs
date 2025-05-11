@@ -1,0 +1,111 @@
+<%- include('./partials/header') %>
+
+<header class="mb-12 text-center">
+  <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-pink-500 py-2">
+    SHARE SOURCE CODE
+  </h1>
+  <p class="text-xl text-gray-400 mt-2">Discover, Share, and Collaborate on Code Snippets & Projects.</p>
+</header>
+
+<section class="mb-8">
+  <form action="/" method="GET" class="flex items-center max-w-xl mx-auto bg-gray-800 rounded-lg p-2 shadow-md">
+    <input 
+      type="text" 
+      name="search" 
+      placeholder="Search by title, description, or language..." 
+      value="<%= typeof searchQuery !== 'undefined' ? searchQuery : '' %>"
+      class="flex-grow bg-transparent text-gray-200 placeholder-gray-500 focus:outline-none px-4 py-3"
+    />
+    <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-md transition duration-150">
+      <i class="fas fa-search mr-2"></i>Search
+    </button>
+  </form>
+</section>
+
+<section>
+  <% if (codes.length === 0) { %>
+    <div class="text-center py-12">
+      <i class="fas fa-folder-open text-6xl text-gray-600 mb-4"></i>
+      <p class="text-2xl text-gray-500 font-semibold">No code snippets found.</p>
+      <% if (typeof searchQuery !== 'undefined' && searchQuery) { %>
+        <p class="text-gray-400 mt-2">Try adjusting your search terms.</p>
+      <% } else { %>
+        <p class="text-gray-400 mt-2">Be the first to <a href="/codes/upload" class="text-primary-400 hover:underline">share some code</a>!</p>
+      <% } %>
+    </div>
+  <% } else { %>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <% codes.forEach(code => { %>
+        <div class="bg-gray-800 rounded-xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]">
+          <div class="p-6">
+            <div class="flex justify-between items-start mb-3">
+              <span class="inline-block bg-primary-500 text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
+                <%= code.language %>
+              </span>
+              <% if (!code.isPublic) { %>
+                <span class="inline-flex items-center text-xs font-medium text-yellow-400">
+                  <i class="fas fa-lock mr-1.5"></i> Private
+                </span>
+              <% } %>
+            </div>
+            <a href="/codes/view/<%= code._id %>" class="block mb-2">
+              <h3 class="text-2xl font-bold text-gray-100 hover:text-primary-400 transition-colors">
+                <%= code.title %>
+              </h3>
+            </a>
+            <p class="text-gray-400 text-sm mb-4 h-16 overflow-hidden">
+              <%= code.description && code.description.length > 100 ? code.description.slice(0, 100) + '...' : code.description || 'No description provided.' %>
+            </p>
+            <div class="border-t border-gray-700 pt-4">
+              <div class="flex justify-between items-center text-xs text-gray-500">
+                <span>
+                  <i class="fas fa-user mr-1.5"></i> <%= code.uploader ? code.uploader.username : 'Unknown' %>
+                </span>
+                <span>
+                  <i class="fas fa-calendar-alt mr-1.5"></i> <%= new Date(code.createdAt).toLocaleDateString() %>
+                </span>
+                 <span>
+                  <i class="fas fa-eye mr-1.5"></i> <%= code.views || 0 %>
+                </span>
+              </div>
+              <% if (code.fileUrl) { %>
+                <a href="<%= code.fileUrl %>" target="_blank" rel="noopener noreferrer"
+                   class="mt-4 inline-flex items-center justify-center w-full bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2.5 rounded-md transition duration-150 text-sm">
+                  <i class="fas fa-download mr-2"></i> Download File (<%= code.fileName && code.fileName.split('.').pop().toUpperCase() %>)
+                </a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <% if (lastPage > 1) { %>
+      <nav class="mt-12 flex justify-center items-center space-x-3" aria-label="Pagination">
+        <% if (hasPreviousPage) { %>
+          <a href="/?page=<%= previousPage %><%- searchQuery ? '&search=' + searchQuery : '' %>" class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i> Previous
+          </a>
+        <% } %>
+        
+        <% for (let i = 1; i <= lastPage; i++) { %>
+          <% if (i === currentPage) { %>
+            <span class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md" aria-current="page"><%= i %></span>
+          <% } else if (i === 1 || i === lastPage || (i >= currentPage - 1 && i <= currentPage + 1) || (currentPage <=2 && i <=3) || (currentPage >=lastPage-1 && i >= lastPage-2) ) { %>
+            <a href="/?page=<%= i %><%- searchQuery ? '&search=' + searchQuery : '' %>" class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors"><%= i %></a>
+          <% } else if ( (i === currentPage - 2 && currentPage > 3) || (i === currentPage + 2 && currentPage < lastPage - 2) ) { %>
+             <span class="px-4 py-2 text-sm font-medium text-gray-500">...</span>
+          <% } %>
+        <% } %>
+
+        <% if (hasNextPage) { %>
+          <a href="/?page=<%= nextPage %><%- searchQuery ? '&search=' + searchQuery : '' %>" class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors">
+            Next <i class="fas fa-arrow-right ml-2"></i>
+          </a>
+        <% } %>
+      </nav>
+    <% } %>
+  <% } %>
+</section>
+
+<%- include('./partials/footer') %>

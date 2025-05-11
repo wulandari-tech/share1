@@ -1,0 +1,34 @@
+  </main>
+  <footer class="bg-gray-800 text-gray-400 text-center p-6 shadow-inner mt-auto">
+    <p>© <%= new Date().getFullYear() %> SHARE SOURCE CODE. CODE BY WANZOFC.</p>
+  </footer>
+
+  <script>
+    // Mobile menu toggle
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const mobileMenu = document.getElementById('mobile-menu');
+    if (mobileMenuButton && mobileMenu) {
+      mobileMenuButton.addEventListener('click', () => {
+        mobileMenu.classList.toggle('hidden');
+      });
+    }
+
+    // Auto-hide flash messages
+    document.querySelectorAll('.flash-message').forEach(flashMessage => {
+      // Remove after 5 seconds (0.5s fade animation + 4.5s delay)
+      setTimeout(() => {
+          flashMessage.remove();
+      }, 5000);
+    });
+
+    // Initialize Highlight.js if on a page that needs it
+    if (typeof hljs !== 'undefined') {
+        document.addEventListener('DOMContentLoaded', (event) => {
+            document.querySelectorAll('pre code:not(.hljs-no-highlight)').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+        });
+    }
+  </script>
+</body>
+</html>
