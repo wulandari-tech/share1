@@ -40,7 +40,12 @@ const UserSchema = new mongoose.Schema({
   following: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  }]
+  }],
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
+  }
 }, { timestamps: true });
 
 UserSchema.pre('save', async function(next) {

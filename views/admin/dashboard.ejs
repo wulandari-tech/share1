@@ -1,0 +1,155 @@
+<%- include('../partials/header', { pageTitle: pageTitle || 'Admin Dashboard' }) %>
+
+<div class="max-w-7xl mx-auto">
+    <header class="mb-8 flex justify-between items-center">
+        <div>
+            <h1 class="text-4xl font-extrabold text-gray-100">Admin Dashboard</h1>
+            <p class="text-lg text-gray-400 mt-1">Manage Reports</p>
+        </div>
+        <div>
+            <a href="/admin/dashboard?status=pending" class="px-4 py-2 rounded-md text-sm font-medium <%= currentStatusFilter === 'pending' ? 'bg-yellow-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600' %>">Pending</a>
+            <a href="/admin/dashboard?status=reviewed_action_taken" class="ml-2 px-4 py-2 rounded-md text-sm font-medium <%= currentStatusFilter === 'reviewed_action_taken' ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600' %>">Action Taken</a>
+            <a href="/admin/dashboard?status=reviewed_no_action" class="ml-2 px-4 py-2 rounded-md text-sm font-medium <%= currentStatusFilter === 'reviewed_no_action' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600' %>">No Action</a>
+        </div>
+    </header>
+
+    <% if (!reports || reports.length === 0) { %>
+        <div class="text-center py-12 bg-gray-800 rounded-lg shadow-md">
+            <i class="fas fa-folder-open text-5xl text-gray-600 mb-4"></i>
+            <p class="text-xl text-gray-500">No reports found with status "<%= currentStatusFilter %>".</p>
+        </div>
+    <% } else { %>
+        <div class="bg-gray-800 shadow-xl rounded-lg overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-700">
+                <thead class="bg-gray-700/50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Reported Item</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Type</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Reason</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Reporter</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Date</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-gray-800 divide-y divide-gray-700">
+                    <% reports.forEach(report => { %>
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-200">
+                                <% if (report.reportedItemType === 'Code' && report.reportedItemDetails && report.reportedItemDetails._id) { %>
+                                    <a href="/codes/view/<%= report.reportedItemDetails._id %>" target="_blank" class="text-primary-400 hover:underline">
+                                        <%= report.reportedItemDetails.title || 'View Post' %>
+                                        <% if (report.reportedItemDetails.uploader) { %>(by <%= report.reportedItemDetails.uploader.username %>)<% } %>
+                                    </a>
+                                <% } else { %>
+                                    ID: <%= report.reportedItemId %>
+                                <% } %>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400"><%= report.reportedItemType %></td>
+                            <td class="px-6 py-4 text-sm text-gray-300 max-w-xs truncate" title="<%= report.reason %>"><%= report.reason %></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                <a href="/<%= report.reporter.username.toLowerCase() %>" class="hover:underline"><%= report.reporter.username %></a>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= new Date(report.createdAt).toLocaleDateString() %></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                    <%= report.status === 'pending' ? 'bg-yellow-700 text-yellow-100' : (report.status === 'reviewed_action_taken' ? 'bg-green-700 text-green-100' : 'bg-blue-700 text-blue-100') %>">
+                                    <%= report.status.replace(/_/g, ' ') %>
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button onclick="openReportModal('<%= report._id %>', '<%= report.status %>', `<%- report.adminNotes || '' %>`)" class="text-indigo-400 hover:text-indigo-300">Manage</button>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+
+         <% if (lastPage > 1) { %>
+             <nav class="mt-8 flex justify-center items-center space-x-3 pagination-nav" aria-label="Pagination">
+                 <% if (hasPreviousPage) { %>
+                     <a href="/admin/dashboard?status=<%= currentStatusFilter %>&page=<%= previousPage %>">
+                         <i class="fas fa-arrow-left mr-2"></i> Previous
+                     </a>
+                 <% } %>
+                 <% for (let i = 1; i <= lastPage; i++) { %>
+                     <% if (i === currentPage) { %>
+                         <span class="current-page"><%= i %></span>
+                     <% } else if (i === 1 || i === lastPage || (i >= currentPage - 1 && i <= currentPage + 1) || (currentPage <=2 && i <=3) || (currentPage >=lastPage-1 && i >= lastPage-2) ) { %>
+                          <a href="/admin/dashboard?status=<%= currentStatusFilter %>&page=<%= i %>"><%= i %></a>
+                     <% } else if ( (i === currentPage - 2 && currentPage > 3) || (i === currentPage + 2 && currentPage < lastPage - 2) ) { %>
+                          <span class="ellipsis">...</span>
+                     <% } %>
+                 <% } %>
+                 <% if (hasNextPage) { %>
+                     <a href="/admin/dashboard?status=<%= currentStatusFilter %>&page=<%= nextPage %>">
+                         Next <i class="fas fa-arrow-right ml-2"></i>
+                     </a>
+                 <% } %>
+             </nav>
+         <% } %>
+    <% } %>
+</div>
+
+ <div id="reportModal" class="fixed z-[100] inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+         <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+         <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">​</span>
+         <div class="inline-block align-bottom bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+             <form id="manageReportForm" method="POST">
+                 <div class="bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                     <div class="sm:flex sm:items-start">
+                         <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-primary-700 sm:mx-0 sm:h-10 sm:w-10">
+                             <i class="fas fa-shield-alt text-primary-300"></i>
+                         </div>
+                         <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                             <h3 class="text-lg leading-6 font-medium text-gray-100" id="modal-title">Manage Report</h3>
+                             <div class="mt-4 space-y-4">
+                                 <div>
+                                     <label for="report_status" class="block text-sm font-medium text-gray-300">Status</label>
+                                     <select id="report_status" name="status" class="mt-1 block w-full pl-3 pr-10 py-2 text-base bg-gray-700 border-gray-600 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md text-gray-200">
+                                         <option value="pending">Pending</option>
+                                         <option value="reviewed_action_taken">Reviewed - Action Taken</option>
+                                         <option value="reviewed_no_action">Reviewed - No Action</option>
+                                     </select>
+                                 </div>
+                                 <div>
+                                     <label for="admin_notes" class="block text-sm font-medium text-gray-300">Admin Notes (Optional)</label>
+                                     <textarea id="admin_notes" name="adminNotes" rows="3" class="mt-1 shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-600 rounded-md bg-gray-700 text-gray-200" placeholder="Notes for this report..."></textarea>
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+                 <div class="bg-gray-800 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse border-t border-gray-700">
+                     <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
+                         Save Changes
+                     </button>
+                     <button type="button" onclick="closeReportModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-600 shadow-sm px-4 py-2 bg-gray-700 text-base font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                         Cancel
+                     </button>
+                 </div>
+             </form>
+         </div>
+     </div>
+ </div>
+
+<script>
+    const reportModal = document.getElementById('reportModal');
+    const manageReportForm = document.getElementById('manageReportForm');
+    const reportStatusSelect = document.getElementById('report_status');
+    const adminNotesTextarea = document.getElementById('admin_notes');
+
+    function openReportModal(reportId, currentStatus, currentNotes) {
+        manageReportForm.action = `/admin/reports/${reportId}/status`;
+        reportStatusSelect.value = currentStatus;
+        adminNotesTextarea.value = currentNotes;
+        reportModal.classList.remove('hidden');
+    }
+    function closeReportModal() {
+        reportModal.classList.add('hidden');
+    }
+</script>
+
+<%- include('../partials/footer') %>

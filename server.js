@@ -9,16 +9,13 @@ const User = require('./models/user');
 const Code = require('./models/code');
 const Notification = require('./models/notification');
 const connectDB = require('./config/database');
-
 const indexRoutes = require('./routes/index');
 const authRoutes = require('./routes/auth');
 const codeRoutes = require('./routes/codes');
 const userRoutes = require('./routes/users');
-
+const adminRoutes = require('./routes/admin');
 const app = express();
-
 connectDB();
-
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
@@ -61,6 +58,7 @@ app.use(async (req, res, next) => {
 
 app.use('/', indexRoutes);
 app.use('/', authRoutes);
+app.use('/admin', adminRoutes);
 app.use('/codes', codeRoutes);
 app.use('/users', userRoutes);
 

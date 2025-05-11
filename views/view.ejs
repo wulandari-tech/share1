@@ -4,24 +4,28 @@
   <article class="bg-gray-800 shadow-xl rounded-xl p-6 md:p-10">
     <header class="mb-6 border-b border-gray-700 pb-6">
       <div class="flex flex-col sm:flex-row justify-between items-start">
-        <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-pink-500 leading-tight mb-3 sm:mb-0">
+        <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-pink-500 leading-tight mb-3 sm:mb-0 flex-grow">
           <%= code.title %>
         </h1>
-        <% if (currentUser && code.uploader && currentUser._id.toString() === code.uploader._id.toString()) { %>
-          <div class="flex space-x-3 flex-shrink-0 self-start sm:self-center mt-2 sm:mt-0">
-            <a href="/codes/<%= code._id %>/edit" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-4 py-2 rounded-md transition duration-150 flex items-center">
-              <i class="fas fa-edit mr-2"></i> Edit
-            </a>
-            <form action="/codes/<%= code._id %>?_method=DELETE" method="POST" onsubmit="return confirm('Are you sure you want to delete this?');">
-              <button type="submit" class="text-sm bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-md transition duration-150 flex items-center">
-                <i class="fas fa-trash mr-2"></i> Delete
-              </button>
-            </form>
-          </div>
-        <% } %>
+        <div class="flex space-x-3 flex-shrink-0 self-start sm:self-center mt-2 sm:mt-0">
+            <% if (currentUser && code.uploader && currentUser._id.toString() === code.uploader._id.toString()) { %>
+                <a href="/codes/<%= code._id %>/edit" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-4 py-2 rounded-md transition duration-150 flex items-center">
+                    <i class="fas fa-edit mr-2"></i> Edit
+                </a>
+                <form action="/codes/<%= code._id %>?_method=DELETE" method="POST" onsubmit="return confirm('Are you sure you want to delete this post?');">
+                    <button type="submit" class="text-sm bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-md transition duration-150 flex items-center">
+                        <i class="fas fa-trash mr-2"></i> Delete
+                    </button>
+                </form>
+            <% } else if (currentUser) { %>
+                <button onclick="openReportPostModal()" class="text-sm bg-red-700 hover:bg-red-800 text-white font-semibold px-3 py-2 rounded-md transition duration-150 flex items-center">
+                    <i class="fas fa-flag mr-1.5"></i> Report Post
+                </button>
+            <% } %>
+        </div>
       </div>
       <div class="mt-4 text-sm text-gray-400 flex flex-wrap gap-x-4 gap-y-2 items-center">
-        <span><i class="fas fa-user mr-1.5 text-primary-400"></i> By <a href="/users/<%= code.uploader._id %>" class="hover:underline"><%= code.uploader ? code.uploader.username : 'Unknown' %></a></span>
+        <span><i class="fas fa-user mr-1.5 text-primary-400"></i> By <a href="/<%= code.uploader.username.toLowerCase() %>" class="hover:underline"><%= code.uploader ? code.uploader.username : 'Unknown' %></a></span>
         <span><i class="fas fa-calendar-alt mr-1.5 text-primary-400"></i> <%= new Date(code.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></span>
         <span><i class="fas fa-tag mr-1.5 text-primary-400"></i> <span class="bg-gray-700 px-2 py-0.5 rounded-full text-xs"><%= code.snippetLanguage %></span></span>
         <span><i class="fas fa-eye mr-1.5 text-primary-400"></i> <%= code.views || 0 %> views</span>
@@ -38,7 +42,7 @@
       </div>
     <% } %>
 
-    <% if (code.isSnippetTextFile && code.fetchedSnippetContent !== null) { %>
+    <% if (code.isSnippetTextFile && typeof code.fetchedSnippetContent === 'string') { %>
       <div class="mb-8">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3">
             <h2 class="text-xl font-semibold text-gray-200 mb-2 sm:mb-0">Code Snippet</h2>
@@ -61,7 +65,7 @@
     <% } else if (code.isSnippetTextFile && code.fetchedSnippetContent === null) { %>
         <div class="mb-8 bg-yellow-900 border border-yellow-700 text-yellow-300 px-4 py-3 rounded relative" role="alert">
             <strong class="font-bold">Note:</strong>
-            <span class="block sm:inline">The code snippet content could not be loaded.</span>
+            <span class="block sm:inline">The code snippet content could not be loaded. It might be unavailable or there was an issue fetching it.</span>
         </div>
     <% } %>
 
@@ -85,11 +89,10 @@
       <iframe id="previewFrame" class="w-full h-96 rounded-lg border-2 border-gray-700 bg-white shadow-md"></iframe>
     </div>
 
-    <!-- Like Button -->
     <div class="my-6 flex items-center">
       <form action="/codes/<%= code._id %>/like" method="POST">
         <% let userHasLiked = false; %>
-        <% if(currentUser && code.likes && code.likes.some(like => like.toString() === currentUser._id.toString())) { userHasLiked = true; } %>
+        <% if(currentUser && code.likes && code.likes.some(likeId => likeId.toString() === currentUser._id.toString())) { userHasLiked = true; } %>
         <button type="submit" class="like-button <%= userHasLiked ? 'liked' : '' %> text-gray-400 hover:text-red-500 transition-colors duration-150 py-2 px-4 rounded-lg flex items-center text-lg bg-gray-700 hover:bg-gray-600">
           <i class="fas fa-heart mr-2 <%= userHasLiked ? 'text-red-500' : 'text-gray-500' %>"></i> 
           <span><%= userHasLiked ? 'Unlike' : 'Like' %></span>
@@ -98,7 +101,6 @@
       <span class="ml-4 text-gray-400 text-lg"><%= code.likes ? code.likes.length : 0 %> Likes</span>
     </div>
 
-    <!-- Comments Section -->
     <div id="comments-section" class="mt-10 pt-6 border-t border-gray-700">
       <h2 class="text-2xl font-semibold text-gray-100 mb-6">Comments (<%= comments.length %>)</h2>
       <% if (currentUser) { %>
@@ -123,20 +125,26 @@
         <% if (comments.length > 0) { %>
           <% comments.forEach(comment => { %>
             <div class="comment bg-gray-700/50 p-4 rounded-lg shadow transition-shadow hover:shadow-md">
-              <div class="flex justify-between items-center mb-2">
-                <p class="text-sm text-gray-300 font-semibold">
-                  <a href="/users/<%= comment.author.id._id %>" class="hover:underline"><i class="fas fa-user text-primary-400 mr-1.5"></i><%= comment.author.username %></a>
-                </p>
+              <div class="flex justify-between items-start mb-2">
+                <div class="flex items-center space-x-3">
+                    <img src="<%= comment.author.id.avatar && comment.author.id.avatar.url ? comment.author.id.avatar.url : '/images/default-avatar.png' %>" alt="<%= comment.author.username %>" class="w-8 h-8 rounded-full object-cover">
+                    <p class="text-sm text-gray-300 font-semibold">
+                      <a href="/<%= comment.author.username.toLowerCase() %>" class="hover:underline"><%= comment.author.username %></a>
+                    </p>
+                </div>
                 <p class="text-xs text-gray-500"><%= new Date(comment.createdAt).toLocaleString() %></p>
               </div>
-              <p class="text-gray-200 whitespace-pre-wrap"><%- comment.text.replace(/\n/g, '<br>') %></p>
-              <% if (currentUser && comment.author.id._id.toString() === currentUser._id.toString()) { %>
-                <form action="/codes/<%= code._id %>/comments/<%= comment._id %>?_method=DELETE" method="POST" class="mt-2 text-right" onsubmit="return confirm('Delete this comment?');">
-                  <button type="submit" class="text-xs text-red-500 hover:text-red-400 hover:underline">
-                    <i class="fas fa-trash-alt mr-1"></i>Delete
-                  </button>
-                </form>
-              <% } %>
+              <p class="text-gray-200 whitespace-pre-wrap pl-11"><%- comment.text.replace(/\n/g, '<br>') %></p>
+              <div class="pl-11 mt-2 flex justify-end space-x-3">
+                <% if (currentUser && (comment.author.id._id.toString() === currentUser._id.toString() || (currentUser.role === 'admin' || (code.uploader && code.uploader._id.toString() === currentUser._id.toString() ))) ) { %>
+                    <form action="/codes/<%= code._id %>/comments/<%= comment._id %>?_method=DELETE" method="POST" onsubmit="return confirm('Delete this comment?');">
+                        <button type="submit" class="text-xs text-red-500 hover:text-red-400 hover:underline delete-comment-btn">
+                            <i class="fas fa-trash-alt mr-1"></i>Delete
+                        </button>
+                    </form>
+                <% } %>
+                <!-- Tombol Report Komentar akan ditambahkan di sini jika fitur diimplementasikan -->
+              </div>
             </div>
           <% }) %>
         <% } else { %>
@@ -144,7 +152,6 @@
         <% } %>
       </div>
     </div>
-
   </article>
 
   <div class="text-center mt-8">
@@ -156,6 +163,40 @@
 
 <div id="copy-toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-md opacity-0 transition-opacity duration-300 z-[100]">
   Code copied to clipboard!
+</div>
+
+<div id="reportPostModal" class="fixed z-[100] inset-0 overflow-y-auto hidden" aria-labelledby="report-post-modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">​</span>
+        <div class="inline-block align-bottom bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <form id="reportPostForm" action="/codes/<%= code._id %>/report" method="POST">
+                <div class="bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-700 sm:mx-0 sm:h-10 sm:w-10">
+                            <i class="fas fa-flag text-red-300"></i>
+                        </div>
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                            <h3 class="text-lg leading-6 font-medium text-gray-100" id="report-post-modal-title">Report Post: "<%= code.title %>"</h3>
+                            <div class="mt-4">
+                                <label for="report_reason" class="block text-sm font-medium text-gray-300">Reason for reporting</label>
+                                <textarea id="report_reason" name="reason" rows="4" required minlength="10" maxlength="500" class="mt-1 shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-600 rounded-md bg-gray-700 text-gray-200" placeholder="Please provide specific details..."></textarea>
+                                <p class="mt-1 text-xs text-gray-500">Min 10 characters, max 500.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-800 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse border-t border-gray-700">
+                    <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
+                        Submit Report
+                    </button>
+                    <button type="button" onclick="closeReportPostModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-600 shadow-sm px-4 py-2 bg-gray-700 text-base font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -193,6 +234,16 @@
     const previewBox = document.getElementById("previewBox");
     previewBox.classList.remove("hidden");
     previewBox.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  const reportPostModal = document.getElementById('reportPostModal');
+  function openReportPostModal() {
+      if(reportPostModal) reportPostModal.classList.remove('hidden');
+  }
+  function closeReportPostModal() {
+      if(reportPostModal) reportPostModal.classList.add('hidden');
+      const form = document.getElementById('reportPostForm');
+      if(form) form.reset(); // Reset form saat modal ditutup
   }
 </script>
 
