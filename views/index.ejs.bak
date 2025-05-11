@@ -1,7 +1,6 @@
 <%- include('./partials/header') %>
 
 <header class="mb-12 text-center">
-<script charset="UTF-8" src="//web.webpushs.com/js/push/6f5ab258d9ca2e02b08bbdcf4494381c_1.js" asinkron></script>
   <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-pink-500 to-emerald-400 py-2 animated-gradient-text">
     SHARE SOURCE CODE
   </h1>
