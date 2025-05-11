@@ -21,7 +21,24 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Password is required'],
     minlength: [6, 'Password must be at least 6 characters long']
-  }
+  },
+  bio: {
+    type: String,
+    maxlength: 250,
+    default: ''
+  },
+  avatar: {
+    url: { type: String, default: '/images/default-avatar.png' },
+    public_id: String
+  },
+  followers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  following: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, { timestamps: true });
 
 UserSchema.pre('save', async function(next) {
