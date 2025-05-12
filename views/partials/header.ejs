@@ -92,7 +92,7 @@
               <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium <%= currentPath === '/codes/upload' ? 'bg-gray-900 text-white' : '' %>">Upload</a>
               <a href="/users/notifications" class="relative text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium <%= currentPath === '/users/notifications' ? 'bg-gray-900 text-white' : '' %>">
                 <i class="fas fa-bell"></i>
-                <% if (unreadNotificationsCount && unreadNotificationsCount > 0) { %>
+                <% if (locals.unreadNotificationsCount && unreadNotificationsCount > 0) { %>
                     <span class="notification-badge"><%= unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount %></span>
                 <% } %>
               </a>
@@ -130,7 +130,7 @@
           <a href="/codes/upload" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium <%= currentPath === '/codes/upload' ? 'bg-gray-900 text-white' : '' %>">Upload</a>
           <a href="/users/notifications" class="relative text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium <%= currentPath === '/users/notifications' ? 'bg-gray-900 text-white' : '' %>">
             <i class="fas fa-bell"></i> Notifications
-            <% if (unreadNotificationsCount && unreadNotificationsCount > 0) { %>
+            <% if (locals.unreadNotificationsCount && unreadNotificationsCount > 0) { %>
                 <span class="notification-badge" style="top: 2px; right: 2px;"><%= unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount %></span>
             <% } %>
           </a>
@@ -145,3 +145,115 @@
   </nav>
   <main class="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <%- include('./flash') %>
+
+    <%# HTML untuk Banner Push Notification (akan dikontrol oleh JavaScript di bawah) %>
+    <div id="push-prompt-banner" class="hidden fixed bottom-0 inset-x-0 pb-2 sm:pb-5 z-40">
+        <div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+            <div class="p-3 rounded-lg bg-primary-600 shadow-lg sm:p-3">
+                <div class="flex items-center justify-between flex-wrap">
+                    <div class="w-0 flex-1 flex items-center">
+                        <span class="flex p-2 rounded-lg bg-primary-800">
+                            <i class="fas fa-bell text-white"></i>
+                        </span>
+                        <p class="ml-3 font-medium text-white truncate">
+                            <span class="md:hidden">Enable notifications?</span>
+                            <span class="hidden md:inline">Get notified about new posts and interactions!</span>
+                        </p>
+                    </div>
+                    <div class="order-3 mt-2 flex-shrink-0 w-full sm:order-2 sm:mt-0 sm:w-auto">
+                        <button id="enable-push-notifications-btn" class="flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-primary-600 bg-white hover:bg-primary-50">
+                            Enable Notifications
+                        </button>
+                    </div>
+                    <div class="order-2 flex-shrink-0 sm:order-3 sm:ml-2">
+                        <button type="button" id="dismiss-push-prompt" class="-mr-1 flex p-2 rounded-md hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-white">
+                            <span class="sr-only">Dismiss</span>
+                            <i class="fas fa-times text-white"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <% if (currentUser && process.env.NOTIFICATIONAPI_CLIENT_ID) { %>
+        <script type="module">
+            import NotificationAPI from 'https://cdn.jsdelivr.net/npm/notificationapi-js-client-sdk@latest/dist/esm/index.js';
+            
+            const notificationapi = new NotificationAPI({
+                clientId: "<%= process.env.NOTIFICATIONAPI_CLIENT_ID %>",
+                userId: "<%= currentUser._id.toString() %>",
+                customServiceWorkerPath: "/notificationapi-service-worker.js"
+            });
+
+            async function requestNotificationPermissionAndIdentify() {
+                if (!('Notification' in window) || !('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+                    console.warn('Push prerequisites not met (Notification API, Service Worker, or active controller).');
+                    return;
+                }
+                try {
+                    const permission = await Notification.requestPermission();
+                    if (permission === 'granted') {
+                        console.log('Push notification permission granted by user.');
+                        await notificationapi.identifyUser({ id: "<%= currentUser._id.toString() %>" });
+                        console.log('User identified with NotificationAPI for push after permission grant.');
+                        const banner = document.getElementById('push-prompt-banner');
+                        if(banner) banner.style.display = 'none';
+                         alert('Push notifications enabled!');
+                    } else {
+                        console.log('Push notification permission denied or dismissed by user.');
+                        alert('Push notification permission was denied or dismissed.');
+                    }
+                } catch (error) {
+                    console.error('Error requesting push permission or identifying user:', error);
+                }
+            }
+            
+            function initializePushNotifications() {
+                if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+                    console.warn('Push messaging is not supported by this browser.');
+                    return;
+                }
+
+                if (!navigator.serviceWorker.controller) {
+                    console.log('Service worker not active yet. Push setup will be attempted after activation or page reload.');
+                    navigator.serviceWorker.ready.then(registration => {
+                        console.log('Service worker ready, attempting identifyUser if permission granted.');
+                        if (Notification.permission === 'granted') {
+                             notificationapi.identifyUser({ id: "<%= currentUser._id.toString() %>" });
+                        }
+                    });
+                    return;
+                }
+
+                const banner = document.getElementById('push-prompt-banner');
+                const enablePushBtn = document.getElementById('enable-push-notifications-btn');
+                const dismissButton = document.getElementById('dismiss-push-prompt');
+
+                if (Notification.permission === 'granted') {
+                    console.log('Push permission already granted. Identifying user with NotificationAPI.');
+                    notificationapi.identifyUser({ id: "<%= currentUser._id.toString() %>" });
+                    if(banner) banner.style.display = 'none';
+                } else if (Notification.permission === 'default') {
+                    console.log('Push permission is default. Showing prompt banner.');
+                    if(banner) banner.classList.remove('hidden');
+                    if(enablePushBtn) enablePushBtn.onclick = requestNotificationPermissionAndIdentify;
+                    if(dismissButton && banner) {
+                        dismissButton.onclick = () => {
+                            banner.style.display = 'none';
+                            console.log('Push prompt dismissed by user.');
+                        };
+                    }
+                } else {
+                    console.log('Push permission is denied.');
+                    if(banner) banner.style.display = 'none';
+                }
+            }
+            
+            if (document.readyState === 'complete') {
+                initializePushNotifications();
+            } else {
+                window.addEventListener('load', initializePushNotifications);
+            }
+        </script>
+    <% } %>

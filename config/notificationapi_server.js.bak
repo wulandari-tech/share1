@@ -1,0 +1,42 @@
+// config/notificationapi_server.js
+const NotificationAPISDK = require('notificationapi-node-server-sdk');
+
+let notificationAPIInstance;
+
+// SDK mungkin mengekspor dirinya sendiri sebagai objek default jika __esModule true
+// atau langsung sebagai objek jika CommonJS murni.
+// Contoh dokumentasi menggunakan 'notificationapi.init', jadi kita coba dapatkan objek itu.
+const notificationapi = NotificationAPISDK.default || NotificationAPISDK;
+
+if (typeof notificationapi.init === 'function' && 
+    process.env.NOTIFICATIONAPI_CLIENT_ID && 
+    process.env.NOTIFICATIONAPI_CLIENT_SECRET) {
+    
+    try {
+        notificationapi.init(
+            process.env.NOTIFICATIONAPI_CLIENT_ID,
+            process.env.NOTIFICATIONAPI_CLIENT_SECRET
+        );
+        notificationAPIInstance = notificationapi; // Sekarang instance adalah objek yang sudah diinisialisasi
+        console.log("NotificationAPI Server SDK initialized successfully.");
+    } catch (initError) {
+        console.error("Failed to initialize NotificationAPI Server SDK:", initError);
+    }
+}
+
+if (!notificationAPIInstance) {
+    console.warn("NotificationAPI Server SDK not configured or failed to initialize. NOTIFICATIONAPI_CLIENT_ID or NOTIFICATIONAPI_CLIENT_SECRET might be missing, or SDK init failed.");
+    // Fallback mock instance jika inisialisasi gagal
+    notificationAPIInstance = {
+        send: async (params) => {
+            console.warn("Mock NotificationAPI Send (not configured/initialized):", params);
+            return Promise.resolve({ success: true, message: "Mock send successful (NotificationAPI not configured/initialized)" });
+        },
+        init: () => {
+            console.warn("Mock NotificationAPI Init (not configured/initialized)");
+        }
+        // Tambahkan mock untuk metode lain jika perlu
+    };
+}
+
+module.exports = notificationAPIInstance;

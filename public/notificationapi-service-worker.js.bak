@@ -1,0 +1,55 @@
+self.addEventListener('push', (event) => {
+  if (!(self.Notification && self.Notification.permission === 'granted')) {
+    return;
+  }
+  const data = event.data.json();
+  const title = data.title;
+  const message = data.message;
+  const icon = data.icon || '/images/default-notification-icon.png'; // Sediakan ikon default
+  const tag = data.tag || 'general-notification';
+  const url = data.url;
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: message,
+      tag: tag,
+      icon: icon,
+      data: {
+        url: url
+      },
+      actions: data.actions || [] // Jika Anda menggunakan actions di template NotificationAPI
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const urlToOpen = event.notification.data.url;
+  
+  if (event.action) {
+    // Jika ada action button yang diklik, Anda bisa menangani event.action di sini
+    // Misalnya, jika action adalah 'view_post', buka URL postingan
+    // atau jika 'mark_as_read', kirim request ke server Anda
+    console.log('Notification action clicked:', event.action);
+    // Untuk contoh ini, kita tetap membuka URL utama notifikasi
+  }
+
+  if (urlToOpen) {
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        for (let i = 0; i < clientList.length; i++) {
+          let client = clientList[i];
+          // Jika tab dengan URL yang sama sudah terbuka, fokus ke sana
+          // Perlu penyesuaian URL matching jika URL bisa bervariasi (misalnya ada hash)
+          if (client.url === urlToOpen && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        // Jika tidak ada tab yang cocok, buka window baru
+        if (clients.openWindow) {
+          return clients.openWindow(urlToOpen);
+        }
+      })
+    );
+  }
+});

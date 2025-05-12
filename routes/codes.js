@@ -4,6 +4,7 @@ const Code = require('../models/code');
 const User = require('../models/user');
 const Comment = require('../models/comment');
 const Notification = require('../models/notification');
+const notificationAPI_Server = require('../config/notificationapi_server');
 const { cloudinary, upload } = require('../config/cloudinary');
 const { isLoggedIn, isAuthor } = require('../middleware');
 const tmp = require('tmp');
@@ -48,7 +49,7 @@ function getJudge0LanguageId(languageName) {
 }
 
 router.get('/upload', isLoggedIn, (req, res) => {
-  res.render('upload', { pageTitle: "Upload Code - SHARE SOURCE CODE", code: {} });
+  res.render('upload', { pageTitle: `Upload Code - ${res.locals.SITE_NAME}`, code: {} });
 });
 
 router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
@@ -64,7 +65,7 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
         const user = await User.findById(req.session.user._id).select('githubAccessToken').lean();
         if (!user || !user.githubAccessToken) {
             req.flash('error', 'Please link your GitHub account in profile settings to import Gists.');
-            return res.redirect('/users/profile/edit');
+            return res.redirect(`/${req.session.user.username.toLowerCase()}`);
         }
         const gistUrlParts = importGistUrl.trim().split('/');
         const gistId = gistUrlParts[gistUrlParts.length - 1].split('#')[0];
@@ -166,10 +167,44 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
 
     const newCode = new Code(newCodeData);
     await newCode.save();
+
+    try {
+        const uploader = await User.findById(newCode.uploader).populate('followers', '_id').lean(); // Hanya butuh ID follower
+        if (uploader && uploader.followers && uploader.followers.length > 0) {
+            const followerUserIds = uploader.followers.map(follower => follower._id.toString());
+            
+            const notificationPromises = followerUserIds.map(followerId => {
+                return notificationAPI_Server.send({
+                    notificationId: 'new_post_from_followed_user',
+                    user: { id: followerId },
+                    mergeTags: {
+                        uploaderName: uploader.username,
+                        postTitle: newCode.title,
+                        postId: newCode._id.toString(),
+                        postUrl: `${req.protocol}://${req.get('host')}/codes/view/${newCode._id}`
+                    },
+                     webPush: {
+                        title: `New Post from ${uploader.username}!`,
+                        message: `"${newCode.title}" was just shared. Click to view.`,
+                        icon: `${req.protocol}://${req.get('host')}/images/default-notification-icon.png`,
+                        url: `${req.protocol}://${req.get('host')}/codes/view/${newCode._id}`
+                    }
+                }).catch(err => { 
+                    console.error(`Failed to send 'new_post_from_followed_user' NotificationAPI push to ${followerId}:`, err.response ? JSON.stringify(err.response.data, null, 2) : err.message);
+                });
+            });
+            await Promise.allSettled(notificationPromises);
+        }
+    } catch (notifError) {
+        console.error('Error sending new post notifications via NotificationAPI:', notifError);
+    }
+
     req.flash('success', 'Code/File uploaded successfully!');
     res.redirect(`/codes/view/${newCode._id}`);
 
   } catch (err) {
+    if (tempFileObject) tempFileObject.removeCallback();
+
     if (err.name === 'ValidationError') {
         let errors = Object.values(err.errors).map(val => val.message);
         req.flash('error', errors.join(', '));
@@ -189,10 +224,6 @@ router.post('/', isLoggedIn, upload.single('file'), async (req, res, next) => {
     }
     const backURLReferer = req.header('Referer') || '/codes/upload';
     res.redirect(backURLReferer);
-  } finally {
-    if (tempFileObject) {
-      tempFileObject.removeCallback();
-    }
   }
 });
 
@@ -236,7 +267,7 @@ router.get('/view/:id', async (req, res, next) => {
     res.render('view', {
       code: { ...code, views: codeDocument.views, fetchedSnippetContent },
       comments,
-      pageTitle: `${code.title} - SHARE SOURCE CODE`
+      pageTitle: `${code.title} - ${res.locals.SITE_NAME}`
     });
   } catch (err) {
     next(err);
@@ -258,7 +289,7 @@ router.get('/:id/edit', isLoggedIn, isAuthor, async (req, res, next) => {
         }
         res.render('edit', {
             code: { ...codeToEdit, fetchedSnippetContentForEdit },
-            pageTitle: `Edit ${codeToEdit.title} - SHARE SOURCE CODE`
+            pageTitle: `Edit ${codeToEdit.title} - ${res.locals.SITE_NAME}`
         });
     } catch (err) {
         next(err);
@@ -331,6 +362,7 @@ router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res,
     req.flash('success', 'Code/File updated successfully!');
     res.redirect(`/codes/view/${codeToUpdate._id}`);
   } catch (err) {
+     if (tempFileObject) tempFileObject.removeCallback();
      if (err.name === 'ValidationError') {
         let errors = Object.values(err.errors).map(val => val.message);
         req.flash('error', errors.join(', '));
@@ -344,10 +376,6 @@ router.put('/:id', isLoggedIn, isAuthor, upload.single('file'), async (req, res,
     }
     const backURLReferer = req.header('Referer') || `/codes/${req.params.id}/edit`;
     res.redirect(backURLReferer);
-  } finally {
-    if (tempFileObject) {
-      tempFileObject.removeCallback();
-    }
   }
 });
 
@@ -410,7 +438,8 @@ router.post('/:id/like', isLoggedIn, async (req, res, next) => {
 
         const userId = new mongoose.Types.ObjectId(req.session.user._id);
         const userIndexInLikes = code.likes.findIndex(id => id.equals(userId));
-        let notification;
+        let internalNotification;
+        let pushNotificationPromise;
 
         if (userIndexInLikes > -1) {
             code.likes.splice(userIndexInLikes, 1);
@@ -418,17 +447,34 @@ router.post('/:id/like', isLoggedIn, async (req, res, next) => {
         } else {
             code.likes.push(userId);
             if (!code.uploader.equals(userId)) {
-                notification = new Notification({
+                internalNotification = new Notification({
                     recipient: code.uploader,
                     sender: userId,
                     type: 'like',
                     targetPost: code._id,
                 });
+                pushNotificationPromise = notificationAPI_Server.send({
+                    notificationId: 'post_liked',
+                    user: { id: code.uploader.toString() },
+                    mergeTags: {
+                        likerName: req.session.user.username,
+                        postTitle: code.title,
+                        postId: code._id.toString(),
+                        postUrl: `${req.protocol}://${req.get('host')}/codes/view/${code._id}`
+                    },
+                    webPush: { 
+                        title: `${req.session.user.username} liked your post!`,
+                        message: `Your post "${code.title}" received a new like.`,
+                        icon: `${req.protocol}://${req.get('host')}/images/default-notification-icon.png`,
+                        url: `${req.protocol}://${req.get('host')}/codes/view/${code._id}`
+                    }
+                }).catch(err => console.error(`Failed to send 'post_liked' NotificationAPI push to ${code.uploader}:`, err.response ? JSON.stringify(err.response.data, null, 2) : err.message));
             }
             req.flash('success', 'Post liked!');
         }
         await code.save();
-        if (notification) await notification.save();
+        if (internalNotification) await internalNotification.save();
+        if (pushNotificationPromise) await pushNotificationPromise;
 
         res.redirect(backURL);
     } catch (err) {
@@ -465,18 +511,37 @@ router.post('/:id/comments', isLoggedIn, async (req, res, next) => {
         });
         await newComment.save();
         
-        let notification;
+        let internalNotification;
+        let pushNotificationPromise;
         if (!code.uploader.equals(req.session.user._id)) {
-            notification = new Notification({
+            internalNotification = new Notification({
                 recipient: code.uploader,
                 sender: req.session.user._id,
                 type: 'comment',
                 targetPost: code._id,
             });
-            await notification.save();
+            pushNotificationPromise = notificationAPI_Server.send({
+                notificationId: 'new_comment_on_post',
+                user: { id: code.uploader.toString() },
+                mergeTags: {
+                    commenterName: req.session.user.username,
+                    postTitle: code.title,
+                    postId: code._id.toString(),
+                    postUrl: `${req.protocol}://${req.get('host')}/codes/view/${code._id}#comment-${newComment._id}`
+                },
+                 webPush: { 
+                    title: `New comment on "${code.title}"`,
+                    message: `${req.session.user.username} commented: ${newComment.text.substring(0, 50)}...`,
+                    icon: `${req.protocol}://${req.get('host')}/images/default-notification-icon.png`,
+                    url: `${req.protocol}://${req.get('host')}/codes/view/${code._id}#comment-${newComment._id}`
+                }
+            }).catch(err => console.error(`Failed to send 'new_comment_on_post' NotificationAPI push to ${code.uploader}:`, err.response ? JSON.stringify(err.response.data, null, 2) : err.message));
         }
+        if (internalNotification) await internalNotification.save();
+        if (pushNotificationPromise) await pushNotificationPromise;
+
         req.flash('success', 'Comment added successfully!');
-        res.redirect(backURL + '#comments-section');
+        res.redirect(backURL + `#comment-${newComment._id}`);
     } catch (err) {
         if (err.name === 'ValidationError') {
             let errors = Object.values(err.errors).map(val => val.message);
@@ -541,9 +606,13 @@ router.post('/:id/export-gist', isLoggedIn, async (req, res, next) => {
             const response = await axios.get(code.fileUrl, { timeout: 7000 });
             contentToExport = response.data;
         } else if (!code.isSnippetTextFile && code.fileName) {
-            contentToExport = `File: ${code.fileName}\nDescription: ${code.description}\n\nView original on SHARE SOURCE CODE: ${req.protocol}://${req.get('host')}/codes/view/${code._id}`;
+            contentToExport = `File: ${code.fileName}\nDescription: ${code.description || ''}\n\nView original on ${res.locals.SITE_NAME}: ${req.protocol}://${req.get('host')}/codes/view/${code._id}`;
             fileNameForGist = `${code.fileName}.md`;
-        } else {
+        } else if (code.isSnippetTextFile && !code.fileUrl) {
+            req.flash('error', 'Snippet content seems to be missing (no fileUrl). Cannot export.');
+            return res.redirect(backURL);
+        }
+         else {
              req.flash('error', 'No content available to export to Gist.');
              return res.redirect(backURL);
         }

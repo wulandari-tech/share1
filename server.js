@@ -14,11 +14,14 @@ const indexRoutes = require('./routes/index');
 const authRoutes = require('./routes/auth');
 const codeRoutes = require('./routes/codes');
 const userRoutes = require('./routes/users');
+
 const app = express();
+
 connectDB();
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.locals.moment = require('moment'); // Jika Anda ingin menggunakan moment.js di EJS
+app.locals.moment = require('moment');
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -31,7 +34,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    maxAge: 1000 * 60 * 60 * 24 * 7 // 1 minggu
+    maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }));
 
@@ -39,14 +42,14 @@ app.use(flash());
 
 app.use(async (req, res, next) => {
   res.locals.currentUser = req.session.user;
-  if (req.session.user && req.session.user._id) { // Pastikan _id ada
+  if (req.session.user && req.session.user._id) {
     try {
         res.locals.unreadNotificationsCount = await Notification.countDocuments({
             recipient: req.session.user._id,
             isRead: false
         });
     } catch (error) {
-        console.error("Error fetching unread notifications count for header:", error);
+        console.error("Error fetching unread internal notifications count for header:", error);
         res.locals.unreadNotificationsCount = 0;
     }
   } else {
@@ -54,8 +57,8 @@ app.use(async (req, res, next) => {
   }
   res.locals.success = req.flash('success');
   res.locals.error = req.flash('error');
-  res.locals.SITE_NAME = "SHARE SOURCE CODE"; // Contoh variabel global untuk EJS
-  res.locals.currentPath = req.path; // Untuk active link di navigasi jika perlu
+  res.locals.SITE_NAME = "SHARE SOURCE CODE";
+  res.locals.currentPath = req.path;
   next();
 });
 
@@ -97,7 +100,7 @@ async function populateProfileDataForServer(identifier) {
 app.get('/:username', async (req, res, next) => {
     try {
         const requestedUsername = req.params.username.toLowerCase();
-        const commonRoutesAndPrefixes = ['login', 'register', 'logout', 'search', 'public', 'uploads', 'images', 'js', 'css', 'favicon.ico', 'users', 'codes', 'notifications', 'assets', 'api', 'admin'];
+        const commonRoutesAndPrefixes = ['login', 'register', 'logout', 'search', 'public', 'uploads', 'images', 'js', 'css', 'favicon.ico', 'users', 'codes', 'notifications', 'assets', 'api', 'admin', 'notificationapi-service-worker.js'];
         if (commonRoutesAndPrefixes.some(prefix => requestedUsername.startsWith(prefix))) {
             return next(); 
         }
@@ -185,11 +188,12 @@ app.use((err, req, res, next) => {
   console.error("Global error handler:", err);
   const statusCode = err.status || 500;
   const message = statusCode === 500 ? 'Oh no, something went wrong on our end!' : err.message;
+  const pageErrorTitle = err.status ? `${err.status} Error` : 'Server Error';
   
   if (!res.headersSent) {
     if (req.accepts('html')) {
-        res.status(statusCode).render('error', { // Asumsi ada error.ejs
-            pageTitle: `${statusCode} Error - ${message}`,
+        res.status(statusCode).render('error', {
+            pageTitle: pageErrorTitle,
             errorCode: statusCode,
             errorMessage: message,
             errorStack: process.env.NODE_ENV === 'development' ? err.stack : null
@@ -197,7 +201,7 @@ app.use((err, req, res, next) => {
     } else if (req.accepts('json')) {
         res.status(statusCode).json({ error: message, code: statusCode });
     } else {
-        res.status(statusCode).send(message);
+        res.status(statusCode).type('txt').send(message);
     }
   } else {
     next(err);
